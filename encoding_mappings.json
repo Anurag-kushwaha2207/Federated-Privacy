@@ -1,0 +1,84 @@
+{
+    "Gender": [
+        "F",
+        "M",
+        "Other"
+    ],
+    "Daily Activity Level": [
+        "High",
+        "Low",
+        "Moderate"
+    ],
+    "Diet (if you have)": [
+        "Keto",
+        "Low Sodium",
+        "Low Sugar",
+        "Mediterranean",
+        "Normal",
+        "Other",
+        "Vegan",
+        "Vegetarian"
+    ],
+    "Meal_Pattern": [
+        "2 meals/day",
+        "3 meals/day",
+        "Intermittent fasting",
+        "Multiple small meals"
+    ],
+    "Breakfast_Habit": [
+        "Never",
+        "Only beverage",
+        "Regular",
+        "Sometimes skipped"
+    ],
+    "How Often you consume Packed foods": [
+        "Daily",
+        "Never",
+        "Often",
+        "Rarely",
+        "Sometimes"
+    ],
+    "You consume sugar, salty or spicy foods more often.": [
+        "Mixed",
+        "Neutral",
+        "Salty",
+        "Spicy",
+        "Sugar"
+    ],
+    "Occupation": [
+        "Artist",
+        "Chef",
+        "Driver",
+        "Engineer",
+        "Entrepreneur",
+        "Farmer",
+        "Healthcare Worker",
+        "Office Worker",
+        "Retired",
+        "Salesperson",
+        "Scientist",
+        "Student",
+        "Teacher",
+        "Unemployed"
+    ],
+    "Region": [
+        "Africa",
+        "Asia",
+        "Europe",
+        "Middle East",
+        "North America",
+        "Oceania",
+        "South America"
+    ],
+    "Live_Alone(because stress)": [
+        "No",
+        "Yes"
+    ],
+    "Walk / Bike / Public Transport / Car / Other": [
+        "Bike",
+        "Car",
+        "Other",
+        "Public Transport",
+        "Walk"
+    ]
+}
