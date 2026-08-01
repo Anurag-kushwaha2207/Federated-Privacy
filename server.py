@@ -27,7 +27,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 warnings.filterwarnings('ignore')
 
 # ── IMPORT CLIENTS ─────────────────────────────────────────
-from machine1 import Machine1
+from machine1 import Machine1, ALPHA
 from machine2 import Machine2
 from machine3 import Machine3
 
@@ -53,7 +53,7 @@ if not use_dp:
     global_epsilon = 0.5  # default value for machine initialization
     print("\nConfiguration:")
     print("  Differential Privacy: Disabled")
-    print("  Regularization      : L2 (alpha = 0.01)\n")
+    print(f"  Regularization      : L2 (alpha = {ALPHA})\n")
     dp_enabled_clients = set()
 else:
     if args.epsilon is not None:
@@ -80,7 +80,7 @@ else:
     print(f"  Privacy Budget (eps): {global_epsilon}")
     active_dp_str = ", ".join(f"Machine {x}" for x in sorted(dp_enabled_clients)) if dp_enabled_clients else "None"
     print(f"  DP Active On        : {active_dp_str}")
-    print("  Regularization      : L2 (alpha = 0.01)\n")
+    print(f"  Regularization      : L2 (alpha = {ALPHA})\n")
 
 print("Initializing clients and partitioning dataset...")
 m1 = Machine1(epsilon=global_epsilon)
@@ -114,6 +114,10 @@ print("-" * 64)
 ROUNDS = 5
 history_acc = []
 
+# Re-initialize clients to start Federated Learning with fresh step counters and clean states
+for m in clients:
+    m.initialize_model()
+
 # Initialize global weights to zero (from m1's structure)
 global_coef, global_intercept = m1.get_weights()
 global_coef.fill(0.0)
@@ -137,9 +141,11 @@ for r in range(1, ROUNDS + 1):
         if use_dp and client_num in dp_enabled_clients:
             noisy_coef, noisy_intercept = m.get_dp_weights()
             if r == 1:
-                sensitivity = 2.0 / (m.get_train_size() * m.alpha)
+                # Calculate maximum L2 norm of the features for printing
+                R = np.max(np.linalg.norm(m.X_train, axis=1))
+                sensitivity = (2.0 * R) / (m.get_train_size() * m.alpha)
                 scale = sensitivity / global_epsilon
-                print(f"    - {names[idx]}: sensitivity = {sensitivity:.4f}, noise scale = {scale:.4f} (DP Enabled)")
+                print(f"    - {names[idx]}: sensitivity = {sensitivity:.4f}, noise scale = {scale:.4f}, max_norm(R) = {R:.4f} (DP Enabled)")
         else:
             noisy_coef, noisy_intercept = m.get_weights()
             if r == 1:
@@ -286,7 +292,12 @@ fig, ax = plt.subplots(figsize=(7.0, 5.0), facecolor=BG_COLOR)
 ax.set_facecolor(BG_COLOR)
 
 if use_dp:
-    scales = [2.0 / (m.get_train_size() * m.alpha * global_epsilon) for m in clients]
+    scales = []
+    for m in clients:
+        R = np.max(np.linalg.norm(m.X_train, axis=1))
+        sensitivity = (2.0 * R) / (m.get_train_size() * m.alpha)
+        scale = sensitivity / global_epsilon
+        scales.append(scale)
     x_range = np.linspace(-1.5, 1.5, 1000)
 
     from scipy.stats import laplace as laplace_dist

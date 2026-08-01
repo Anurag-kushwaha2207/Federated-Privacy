@@ -1,0 +1,31 @@
+*****************WITH FEDERATED LEARNING******************
+python server.py                                 -> 98.23     ------------All machine DP 0.5
+python server.py --no-dp                         -> 99.21%
+python server.py -e 0.5 --dp-clients 1           -> 98.14%    ------------Only machine-1 Active DP
+python server.py -e 0.5 --dp-clients 1,2         -> 98.92%    ------------only 1,2 Machine Active DP
+
+
+************WITHOUT FEDERATED LEARNING******************
+
+python machine.py                                 -> 96.18%  ----------------- machine-1                            
+                                                  -> 96.18%  ------------------machine-2
+                                                  -> 96.46%  ------------------machine-3
+
+python machine1.py --no-dp                           98.53% ------------Machine-1 Without dp      
+
+
+weight ----------------------------------------------33%
+
+
+*********************New Task AFTER-0.5, 1.0 Noise Add  and TEST***********************
+python server.py                                 -> 98.43     ------------All machine DP 1.0
+python server.py -e 1.0 --dp-clients 1           -> 98.63%    ------------Only machine-1 Active DP
+python server.py -e 1.0 --dp-clients 1,2         -> 99.31%    ------------only 1,2 Machine Active DP
+
+
+************WITHOUT FEDERATED LEARNING******************
+python machine.py                                 -> 97.94%  ----------------- machine-1                            
+                                                  -> 97.35%  ------------------machine-2
+                                                  -> 98.82%  ------------------machine-3
+                                                  
+

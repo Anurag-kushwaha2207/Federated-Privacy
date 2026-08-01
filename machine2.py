@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 
 # ── CONFIG ─────────────────────────────────────────────────
 DATA_FILE   = os.path.join(os.path.dirname(__file__), "machine2_data.json")
-ALPHA       = 0.01   # Regularization parameter
+ALPHA       = 0.1   # Regularization parameter
 SEED        = 42
 
 class Machine2:
@@ -63,6 +63,11 @@ class Machine2:
         self.n_samples = len(self.X_train)
 
     def initialize_model(self):
+        # Recreate model to reset step counter t_ and optimizer state completely
+        self.model = SGDClassifier(
+            loss='log_loss', penalty='l2', alpha=self.alpha,
+            fit_intercept=True, warm_start=True, random_state=SEED
+        )
         # Call partial_fit once with dummy subset to initialize weights shape
         self.model.partial_fit(self.X_train[:4], [0, 1, 2, 3], classes=[0, 1, 2, 3])
         # Reset initialized weights to zero
@@ -77,6 +82,8 @@ class Machine2:
         """Updates local model weights with global weights."""
         self.model.coef_ = coef.copy()
         self.model.intercept_ = intercept.copy()
+        # Reset step counter so local training starts with a fresh learning rate schedule
+        self.model.t_ = 1.0
 
     def local_train(self, epochs=5):
         """Trains local model for a few epochs on local training set."""
@@ -88,16 +95,20 @@ class Machine2:
         Applies Laplace Output Perturbation DP to local weights.
         
         Sensitivity Formula:
-            L2 Sensitivity ΔW = 2 / (N * alpha)
-            where N = local sample size, alpha = L2 regularization strength.
+            L2 Sensitivity ΔW = 2 * R / (N * alpha)
+            where N = local sample size, alpha = L2 regularization strength,
+            and R = maximum L2 norm of the input feature vectors.
             
         Laplace Scale:
             b = ΔW / epsilon
         """
         coef, intercept = self.get_weights()
         
+        # Calculate maximum L2 norm of the features
+        R = np.max(np.linalg.norm(self.X_train, axis=1))
+        
         # Calculate sensitivity and noise scale
-        sensitivity = 2.0 / (self.n_samples * self.alpha)
+        sensitivity = (2.0 * R) / (self.n_samples * self.alpha)
         scale = sensitivity / self.epsilon
         
         # Generate and add Laplace noise
@@ -116,9 +127,10 @@ class Machine2:
         return self.n_samples
 
     def get_dp_info(self):
-        sensitivity = 2.0 / (self.n_samples * self.alpha)
+        R = np.max(np.linalg.norm(self.X_train, axis=1))
+        sensitivity = (2.0 * R) / (self.n_samples * self.alpha)
         scale = sensitivity / self.epsilon
-        return f"Output Perturbation DP | Sensitivity={sensitivity:.6f} | Scale={scale:.6f}"
+        return f"Output Perturbation DP | Sensitivity={sensitivity:.6f} | Scale={scale:.6f} | MaxNorm(R)={R:.4f}"
 
 # ── STANDALONE TEST ────────────────────────────────────────
 if __name__ == "__main__":

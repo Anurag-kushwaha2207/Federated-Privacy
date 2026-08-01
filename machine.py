@@ -1,0 +1,103 @@
+# -*- coding: utf-8 -*-
+"""
+Standalone Client Execution Script
+Evaluates Machine 1, Machine 2, and Machine 3 independently without Federated Aggregation.
+"""
+
+import sys
+import os
+import argparse
+import warnings
+from sklearn.metrics import accuracy_score, confusion_matrix
+
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+warnings.filterwarnings('ignore')
+
+from machine1 import Machine1
+from machine2 import Machine2
+from machine3 import Machine3
+
+def main():
+    parser = argparse.ArgumentParser(description="Standalone Client Evaluation")
+    parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy")
+    parser.add_argument("-e", "--epsilon", type=float, default=None, help="Privacy Budget (Epsilon)")
+    args, unknown = parser.parse_known_args()
+
+    use_dp = not args.no_dp
+
+    print("================================================================")
+    print("Standalone Client Execution")
+    if not use_dp:
+        global_epsilon = 0.5
+        print("Differential Privacy: Disabled")
+    else:
+        if args.epsilon is not None:
+            global_epsilon = args.epsilon
+        else:
+            try:
+                user_eps = input("Enter Privacy Budget (Epsilon) [default: 0.5]: ").strip()
+                global_epsilon = float(user_eps) if user_eps else 0.5
+            except Exception:
+                global_epsilon = 0.5
+
+        if global_epsilon <= 0:
+            print("Error: Epsilon must be strictly greater than 0.")
+            sys.exit(1)
+
+        print(f"Differential Privacy: Enabled (Epsilon = {global_epsilon})")
+    print("================================================================\n")
+
+    m1 = Machine1(epsilon=global_epsilon)
+    m2 = Machine2(epsilon=global_epsilon)
+    m3 = Machine3(epsilon=global_epsilon)
+
+    clients = [m1, m2, m3]
+    names = ["Machine 1", "Machine 2", "Machine 3"]
+
+    print("Evaluating standalone models...")
+    print("-" * 55)
+
+    local_accuracies = []
+    all_y_true = []
+    all_y_pred = []
+
+    for idx, m in enumerate(clients):
+        m.initialize_model()
+        m.local_train(epochs=15)
+
+        if use_dp:
+            coef, intercept = m.get_dp_weights()
+            m.set_weights(coef, intercept)
+        else:
+            coef, intercept = m.get_weights()
+
+        X_te, y_te = m.get_test_data()
+        preds = m.model.predict(X_te)
+        acc = accuracy_score(y_te, preds)
+
+        local_accuracies.append(acc)
+        all_y_true.extend(y_te)
+        all_y_pred.extend(preds)
+
+        print(f"  {names[idx]:<12} | Train Samples: {m.get_train_size():<5} | Test Accuracy: {acc*100:.2f}%")
+
+    print("\n=================== LOCAL MODELS SUMMARY ===================")
+    print(f"  {'Client':<15} {'Train Samples':>15} {'Test Accuracy':>15}")
+    print(f"  {'-'*47}")
+    for idx in range(len(clients)):
+        sample_cnt = clients[idx].get_train_size()
+        print(f"  {names[idx]:<15} {sample_cnt:>15} {local_accuracies[idx]*100:>14.2f}%")
+    print(f"  {'-'*47}\n")
+
+    class_names = ['Normal', 'Mild Event', 'Moderate Event', 'Severe Event']
+    cm = confusion_matrix(all_y_true, all_y_pred, labels=[0, 1, 2, 3])
+
+    print("Combined Confusion Matrix:")
+    print(f"  {'Actual / Predicted':<20} {'Normal':<10} {'Mild':<10} {'Moderate':<10} {'Severe':<10}")
+    print(f"  {'-'*64}")
+    for i, name in enumerate(class_names):
+        print(f"  {name:<20} {cm[i, 0]:<10} {cm[i, 1]:<10} {cm[i, 2]:<10} {cm[i, 3]:<10}")
+    print()
+
+if __name__ == "__main__":
+    main()
