@@ -11,10 +11,19 @@ python machine.py --no-dp                        -> 99.41%  ----------------- ma
                                                  -> 98.82%  ------------------machine-2
                                                  -> 99.41%  ------------------machine-3
 
-python machine1.py --no-dp                          99.41% ------------Machine-1 Without dp      
+python machine1.py --no-dp                       -> 99.41% ------------Machine-1 Without dp      
 
 
 weight ----------------------------------------------33%
+
+
+*********************STANDALONE WITH DP (epsilon = 0.5)***********************
+
+python machine.py -e 0.5                         -> 98.24%  ----------------- machine-1                            
+                                                 -> 92.06%  ------------------machine-2
+                                                 -> 93.22%  ------------------machine-3
+
+python machine1.py -e 0.5                        -> 93.82% ------------Machine-1 With DP 0.5
 
 
 *********************New Task AFTER-0.5, 1.0 Noise Add  and TEST***********************
