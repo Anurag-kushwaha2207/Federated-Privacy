@@ -1,5 +1,5 @@
 *****************WITH FEDERATED LEARNING******************
-python server.py                                 -> 57.80% (Avg Personalized: 98.05%)  ------------All machine DP 0.5
+python server.py                                 -> 81.75% (Avg Personalized: 99.31%)  ------------All machine DP 0.5
 python server.py --no-dp                         -> 98.53% (Avg Personalized: 98.12%)
 python server.py -e 0.5 --dp-clients 1           -> 80.96% (Avg Personalized: 97.78%)  ------------Only machine-1 Active DP
 python server.py -e 0.5 --dp-clients 1,2         -> 78.70% (Avg Personalized: 98.10%)  ------------only 1,2 Machine Active DP
