@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-excel_path = r"C:\Users\Anurag kushwaha\Documents\2nd data set.xlsx"
+excel_path = os.path.join(base_dir, "2nd data set.xlsx")
 
 print("Loading dataset from Excel path...")
 # Load the dataset from the specified sheet in the Excel file
