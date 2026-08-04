@@ -218,7 +218,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Standalone Client Model with Differential Privacy")
     parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy")
     parser.add_argument("-e", "--epsilon", type=float, default=0.5, help="Privacy Budget (Epsilon) [default: 0.5]")
-    parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="input", help="DP Perturbation stage: 'input' or 'output'")
+    parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="output", help="DP Perturbation stage: 'input' or 'output'")
     args = parser.parse_args()
     
     if not args.no_dp and args.epsilon <= 0:

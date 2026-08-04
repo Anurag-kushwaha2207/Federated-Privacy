@@ -45,7 +45,7 @@ parser = argparse.ArgumentParser(description="Federated Learning + Differential 
 parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy (no noise added)")
 parser.add_argument("-e", "--epsilon", type=float, default=None, help="Privacy Budget (Epsilon / ε) to use directly without prompting")
 parser.add_argument("--dp-clients", type=str, default="1,2,3", help="Comma-separated list of machine numbers to apply DP (e.g. 1 or 1,2)")
-parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="input", help="DP Perturbation stage: 'input' (raw features) or 'output' (model weights)")
+parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="output", help="DP Perturbation stage: 'input' (raw features) or 'output' (model weights)")
 args, unknown = parser.parse_known_args()
 
 use_dp = not args.no_dp

@@ -21,7 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description="Standalone Client Evaluation")
     parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy")
     parser.add_argument("-e", "--epsilon", type=float, default=None, help="Privacy Budget (Epsilon)")
-    parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="input", help="DP Perturbation stage: 'input' or 'output'")
+    parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="output", help="DP Perturbation stage: 'input' or 'output'")
     args, unknown = parser.parse_known_args()
 
     use_dp = not args.no_dp
