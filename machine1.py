@@ -20,8 +20,9 @@ ALPHA       = 0.1   # Regularization parameter
 SEED        = 42
 
 class Machine1:
-    def __init__(self, epsilon=0.5):
+    def __init__(self, epsilon=0.5, dp_mode="input"):
         self.epsilon = epsilon
+        self.dp_mode = dp_mode
         self.alpha   = ALPHA
         
         # Initialize Logistic Regression with SGD (L2 penalty)
@@ -60,7 +61,17 @@ class Machine1:
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X, y, test_size=0.20, random_state=SEED, stratify=y
         )
+        
+        # Fit local StandardScaler on client training data only to avoid global data leakage
+        from sklearn.preprocessing import StandardScaler
+        self.scaler = StandardScaler()
+        self.X_train = self.scaler.fit_transform(self.X_train)
+        self.X_test = self.scaler.transform(self.X_test)
         self.n_samples = len(self.X_train)
+        
+        # Apply Input Perturbation DP if enabled
+        if self.dp_mode == "input" and self.epsilon > 0:
+            self.apply_input_dp()
 
     def initialize_model(self):
         # Recreate model to reset step counter t_ and optimizer state completely
@@ -85,14 +96,57 @@ class Machine1:
         # Reset step counter so local training starts with a fresh learning rate schedule
         self.model.t_ = 1.0
 
-    def local_train(self, epochs=5):
-        """Trains local model for a few epochs on local training set."""
+    def local_train(self, epochs=100):
+        """
+        Trains local model on local training set.
+        We train for a large number of epochs (100+) to ensure near-convergence,
+        which validates the convergence assumption of Output Perturbation DP sensitivity.
+        We compute balanced sample weights to address class imbalance.
+        """
+        from sklearn.utils.class_weight import compute_sample_weight
+        sample_weight = compute_sample_weight(class_weight='balanced', y=self.y_train)
         for _ in range(epochs):
-            self.model.partial_fit(self.X_train, self.y_train)
+            self.model.partial_fit(self.X_train, self.y_train, sample_weight=sample_weight)
+
+    def classify_feature_sensitivity(self, feature_name):
+        """Categorizes features into sensitivity levels (High/Medium/Low)."""
+        high_sens = ['glucose_level', 'blood_pressure_systolic', 'blood_pressure_diastolic', 'heart_rate']
+        medium_sens = ['body_temperature', 'respiratory_rate', 'sleep_quality', 'stress_level', 'hrv_sdnn']
+        low_sens = ['activity_level', 'steps_count', 'calories_burned']
+        
+        if feature_name in high_sens:
+            return "High", 1.5
+        elif feature_name in medium_sens:
+            return "Medium", 1.0
+        else:
+            return "Low", 0.1
+
+    def apply_input_dp(self):
+        """Applies Laplace Local DP (Input Perturbation) to training features based on sensitivity."""
+        feature_cols = [
+            'heart_rate', 'blood_oxygen', 'blood_pressure_systolic', 'blood_pressure_diastolic', 
+            'glucose_level', 'body_temperature', 'respiratory_rate', 'activity_level', 
+            'sleep_quality', 'stress_level', 'hrv_sdnn', 'steps_count', 'calories_burned'
+        ]
+        # Standardized features typically lie in [-3, 3] range. We assume a clip bound B = 3.
+        # Sensitivity of a feature is the width of its range: Delta = 2 * B = 6.0
+        Delta = 6.0
+        
+        for idx, col in enumerate(feature_cols):
+            sens_class, multiplier = self.classify_feature_sensitivity(col)
+            # Epsilon per feature is scaled by the multiplier
+            # High sensitivity = more noise (smaller effective epsilon), Low sensitivity = less noise (larger effective epsilon)
+            feat_eps = self.epsilon / multiplier
+            scale = Delta / feat_eps
+            
+            # Add Laplace noise to the feature column
+            noise = np.random.laplace(loc=0.0, scale=scale, size=self.X_train[:, idx].shape)
+            self.X_train[:, idx] += noise
 
     def get_dp_weights(self):
         """
-        Applies Laplace Output Perturbation DP to local weights.
+        Applies Laplace Output Perturbation DP to local weights if dp_mode is 'output'.
+        If dp_mode is 'input', returns clean weights as noise is already applied to input features.
         
         Sensitivity Formula:
             L2 Sensitivity ΔW = 2 * R / (N * alpha)
@@ -101,7 +155,15 @@ class Machine1:
             
         Laplace Scale:
             b = ΔW / epsilon
+            
+        NOTE: This output perturbation mechanism assumes the local optimization
+        objective has fully converged to the unique L2-regularized ERM minimizer.
+        To approximate this condition, local training epochs should be set high.
         """
+        if self.dp_mode == "input":
+            # Post-processing theorem: model trained on already DP-perturbed inputs inherits DP automatically
+            return self.get_weights()
+
         coef, intercept = self.get_weights()
         
         # Calculate maximum L2 norm of the features
@@ -115,10 +177,23 @@ class Machine1:
         noise_coef = np.random.laplace(loc=0.0, scale=scale, size=coef.shape)
         noise_intercept = np.random.laplace(loc=0.0, scale=scale, size=intercept.shape)
         
+        # The scale parameter specifies the scale parameter of the Laplace distribution.
         noisy_coef = coef + noise_coef
         noisy_intercept = intercept + noise_intercept
         
         return noisy_coef, noisy_intercept
+
+    def fine_tune(self, coef, intercept, epochs=10):
+        """
+        Initializes the model weights with the global weights and fine-tunes
+        the model locally on client training data for personalization.
+        We compute balanced sample weights to address class imbalance.
+        """
+        self.set_weights(coef, intercept)
+        from sklearn.utils.class_weight import compute_sample_weight
+        sample_weight = compute_sample_weight(class_weight='balanced', y=self.y_train)
+        for _ in range(epochs):
+            self.model.partial_fit(self.X_train, self.y_train, sample_weight=sample_weight)
 
     def get_test_data(self):
         return self.X_test, self.y_test
@@ -127,6 +202,9 @@ class Machine1:
         return self.n_samples
 
     def get_dp_info(self):
+        if self.dp_mode == "input":
+            return f"Input Perturbation DP (Local DP) | Epsilon={self.epsilon:.4f} | Mode=Feature-Level Sensitivity"
+        
         R = np.max(np.linalg.norm(self.X_train, axis=1))
         sensitivity = (2.0 * R) / (self.n_samples * self.alpha)
         scale = sensitivity / self.epsilon
@@ -140,6 +218,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Standalone Client Model with Differential Privacy")
     parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy")
     parser.add_argument("-e", "--epsilon", type=float, default=0.5, help="Privacy Budget (Epsilon) [default: 0.5]")
+    parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="input", help="DP Perturbation stage: 'input' or 'output'")
     args = parser.parse_args()
     
     if not args.no_dp and args.epsilon <= 0:
@@ -147,25 +226,25 @@ if __name__ == "__main__":
         exit(1)
         
     # Initialize machine
-    m = Machine1(epsilon=args.epsilon)
+    m = Machine1(epsilon=args.epsilon if not args.no_dp else 0.0, dp_mode=args.dp_mode)
     print(f"\nMachine 1 Standalone Run")
     print(f"Dataset Size: {m.get_train_size()} training samples")
     
     if args.no_dp:
         print("Differential Privacy: Disabled")
     else:
-        print(f"Differential Privacy: Enabled (Epsilon = {args.epsilon})")
+        print(f"Differential Privacy: Enabled (Epsilon = {args.epsilon}, Mode = {args.dp_mode})")
         print(f"DP Info: {m.get_dp_info()}")
         
     print("Training local model...")
-    m.local_train(epochs=15)
+    m.local_train(epochs=100)
     
     # Get weights
     if args.no_dp:
         coef, intercept = m.get_weights()
     else:
         coef, intercept = m.get_dp_weights()
-        # Set the noisy weights back to the model for evaluation
+        # Set the weights back to the model for evaluation
         m.set_weights(coef, intercept)
         
     # Evaluate

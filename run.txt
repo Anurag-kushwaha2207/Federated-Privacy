@@ -1,15 +1,15 @@
 *****************WITH FEDERATED LEARNING******************
-python server.py                                 -> 98.23     ------------All machine DP 0.5
-python server.py --no-dp                         -> 99.21%
-python server.py -e 0.5 --dp-clients 1           -> 98.14%    ------------Only machine-1 Active DP
-python server.py -e 0.5 --dp-clients 1,2         -> 98.92%    ------------only 1,2 Machine Active DP
+python server.py                                 -> 91.27     ------------All machine DP 0.5
+python server.py --no-dp                         -> 98.92%
+python server.py -e 0.5 --dp-clients 1           -> 89.70%    ------------Only machine-1 Active DP
+python server.py -e 0.5 --dp-clients 1,2         -> 85.67%   ------------only 1,2 Machine Active DP
 
 
 ************WITHOUT FEDERATED LEARNING******************
 
-python machine.py                                 -> 96.18%  ----------------- machine-1                            
-                                                  -> 96.18%  ------------------machine-2
-                                                  -> 96.46%  ------------------machine-3
+python machine.py                                 -> 65.88%  ----------------- machine-1                            
+                                                  -> 46.76%  ------------------machine-2
+                                                  -> 58.70%  ------------------machine-3
 
 python machine1.py --no-dp                           98.53% ------------Machine-1 Without dp      
 

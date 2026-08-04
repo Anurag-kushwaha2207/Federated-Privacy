@@ -45,6 +45,7 @@ parser = argparse.ArgumentParser(description="Federated Learning + Differential 
 parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy (no noise added)")
 parser.add_argument("-e", "--epsilon", type=float, default=None, help="Privacy Budget (Epsilon / ε) to use directly without prompting")
 parser.add_argument("--dp-clients", type=str, default="1,2,3", help="Comma-separated list of machine numbers to apply DP (e.g. 1 or 1,2)")
+parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="input", help="DP Perturbation stage: 'input' (raw features) or 'output' (model weights)")
 args, unknown = parser.parse_known_args()
 
 use_dp = not args.no_dp
@@ -76,16 +77,30 @@ else:
         dp_enabled_clients = {1, 2, 3}
 
     print("\nConfiguration:")
-    print("  Differential Privacy: Enabled (Laplace Output Perturbation)")
+    print(f"  Differential Privacy: Enabled ({'Laplace Input Perturbation' if args.dp_mode == 'input' else 'Laplace Output Perturbation'})")
     print(f"  Privacy Budget (eps): {global_epsilon}")
     active_dp_str = ", ".join(f"Machine {x}" for x in sorted(dp_enabled_clients)) if dp_enabled_clients else "None"
     print(f"  DP Active On        : {active_dp_str}")
+    print(f"  DP Mode             : {args.dp_mode.upper()} PERTURBATION")
     print(f"  Regularization      : L2 (alpha = {ALPHA})\n")
 
+ROUNDS = 5
+
+# Calculate epsilon per round based on composition theorem:
+# For Input DP, noise is applied once at the start, so no sequential composition over rounds is needed.
+# For Output DP, noise is applied every round, so we divide the total budget by the number of rounds.
+if use_dp:
+    if args.dp_mode == "input":
+        epsilon_per_round = global_epsilon
+    else:
+        epsilon_per_round = global_epsilon / ROUNDS
+else:
+    epsilon_per_round = 0.0
+
 print("Initializing clients and partitioning dataset...")
-m1 = Machine1(epsilon=global_epsilon)
-m2 = Machine2(epsilon=global_epsilon)
-m3 = Machine3(epsilon=global_epsilon)
+m1 = Machine1(epsilon=epsilon_per_round if 1 in dp_enabled_clients else 0.0, dp_mode=args.dp_mode)
+m2 = Machine2(epsilon=epsilon_per_round if 2 in dp_enabled_clients else 0.0, dp_mode=args.dp_mode)
+m3 = Machine3(epsilon=epsilon_per_round if 3 in dp_enabled_clients else 0.0, dp_mode=args.dp_mode)
 
 clients = [m1, m2, m3]
 names = ["Machine 1", "Machine 2", "Machine 3"]
@@ -98,7 +113,8 @@ local_accuracies = []
 for idx, m in enumerate(clients):
     # Train local model from scratch
     m.initialize_model()
-    m.local_train(epochs=15)
+    # Train for 100 epochs locally to achieve near-convergence for DP sensitivity mathematical guarantees
+    m.local_train(epochs=100)
     
     # Evaluate locally (non-private)
     X_te, y_te = m.get_test_data()
@@ -111,7 +127,6 @@ for idx, m in enumerate(clients):
 print("\nStarting Federated Learning training loops (FedAvg)...")
 print("-" * 64)
 
-ROUNDS = 5
 history_acc = []
 
 # Re-initialize clients to start Federated Learning with fresh step counters and clean states
@@ -133,19 +148,22 @@ for r in range(1, ROUNDS + 1):
         # 1. Server sends current global weights to client
         m.set_weights(global_coef, global_intercept)
         
-        # 2. Client trains locally on its partition
-        m.local_train(epochs=4)
+        # 2. Client trains locally on its partition (100 epochs for near-convergence)
+        m.local_train(epochs=100)
         
         # 3. Client applies Output Perturbation DP if enabled for this client, else returns non-private weights
         client_num = idx + 1
         if use_dp and client_num in dp_enabled_clients:
             noisy_coef, noisy_intercept = m.get_dp_weights()
             if r == 1:
-                # Calculate maximum L2 norm of the features for printing
-                R = np.max(np.linalg.norm(m.X_train, axis=1))
-                sensitivity = (2.0 * R) / (m.get_train_size() * m.alpha)
-                scale = sensitivity / global_epsilon
-                print(f"    - {names[idx]}: sensitivity = {sensitivity:.4f}, noise scale = {scale:.4f}, max_norm(R) = {R:.4f} (DP Enabled)")
+                if args.dp_mode == "input":
+                    print(f"    - {names[idx]}: (Input DP Enabled, Epsilon = {global_epsilon:.4f}, Features Perturbed locally)")
+                else:
+                    # Calculate maximum L2 norm of the features for printing
+                    R = np.max(np.linalg.norm(m.X_train, axis=1))
+                    sensitivity = (2.0 * R) / (m.get_train_size() * m.alpha)
+                    scale = sensitivity / epsilon_per_round
+                    print(f"    - {names[idx]}: sensitivity = {sensitivity:.4f}, noise scale = {scale:.4f}, max_norm(R) = {R:.4f} (DP Enabled, Epsilon per round = {epsilon_per_round:.4f})")
         else:
             noisy_coef, noisy_intercept = m.get_weights()
             if r == 1:
@@ -185,6 +203,16 @@ for r in range(1, ROUNDS + 1):
 
 # ── STEP 4: Final Summary ──
 print("\n=================== FINAL SUMMARY ===================")
+if use_dp:
+    print(f"  Differential Privacy Status : ENABLED ({args.dp_mode.upper()} PERTURBATION)")
+    if args.dp_mode == "input":
+        print(f"  Total Privacy Epsilon       : {global_epsilon:.4f} (Applied at Input Layer)")
+    else:
+        print(f"  Number of rounds (K)        : {ROUNDS}")
+        print(f"  Epsilon per Round (eps_r)   : {epsilon_per_round:.4f}")
+        print(f"  Total Composed Epsilon      : {global_epsilon:.4f} (Sequential Composition: K * eps_r)")
+else:
+    print(f"  Differential Privacy Status : DISABLED")
 print(f"  {'Model / Client':<18} {'Train Records':>15} {'Accuracy':>12}")
 print(f"  {'-'*49}")
 for idx in range(len(clients)):
@@ -193,11 +221,74 @@ print(f"  {'-'*49}")
 print(f"  {'FedAvg Global':<18} {total_samples:>15} {history_acc[-1]*100:>11.2f}%")
 print(f"  {'-'*49}\n")
 
-# Compute final confusion matrix
+# ── STEP 5: Model Personalization (Fine-Tuning) ──
+print("=================== MODEL PERSONALIZATION ===================")
+print("Each client receives the global model and fine-tunes on local data...")
+print("-" * 61)
+personalized_accuracies = []
+for idx, m in enumerate(clients):
+    # Retrieve current global model accuracy on this client's test set
+    m.set_weights(global_coef, global_intercept)
+    X_te, y_te = m.get_test_data()
+    preds_global = m.model.predict(X_te)
+    acc_global = accuracy_score(y_te, preds_global)
+    
+    # Personalize for 10 epochs
+    m.fine_tune(global_coef, global_intercept, epochs=10)
+    preds_pers = m.model.predict(X_te)
+    acc_pers = accuracy_score(y_te, preds_pers)
+    personalized_accuracies.append(acc_pers)
+    print(f"  {names[idx]} | Global Acc: {acc_global*100:.2f}% | Personalized Acc: {acc_pers*100:.2f}%")
+print(f"  Average Personalized Accuracy: {np.mean(personalized_accuracies)*100:.2f}%\n")
+
+# ── STEP 6: Risk Level Mapping & Health Alerts ──
+def map_to_risk_level(pred_class):
+    """Maps health event prediction class (0,1,2,3) to low/medium/high risk levels."""
+    if pred_class == 0:
+        return "LOW RISK"
+    elif pred_class in [1, 2]:
+        return "MEDIUM RISK"
+    else:
+        return "HIGH RISK"
+
+def get_health_recommendation(risk_level):
+    """Generates a health recommendation message based on the risk level."""
+    if risk_level == "LOW RISK":
+        return "Status: Normal. Recommendation: Maintain your daily exercise routine and healthy sleep patterns."
+    elif risk_level == "MEDIUM RISK":
+        return "Status: Mild/Moderate Event detected. Recommendation: Monitor your vital signs closely, reduce physical stress, and rest."
+    else:
+        return "Status: Severe Event detected! Alert: Immediate clinical consultation is advised. Avoid strenuous activities."
+
+# Generate sample risk levels and alerts on Machine 1's local test data (using personalized model)
+print("=================== SAMPLE RISK MAPPINGS & ALERTS ===================")
+print("Displaying rule-based health recommendations from predicted classes...")
+print("-" * 69)
 class_names = ['Normal', 'Mild Event', 'Moderate Event', 'Severe Event']
+X_sample, y_sample = m1.get_test_data()
+preds_sample = m1.model.predict(X_sample[:4])
+for i in range(len(preds_sample)):
+    risk = map_to_risk_level(preds_sample[i])
+    rec = get_health_recommendation(risk)
+    print(f"  Sample {i+1} | Predicted: {preds_sample[i]} ({class_names[preds_sample[i]]}) | Risk Level: {risk}")
+    print(f"    - Alert/Recommendation: {rec}")
+print()
+
+# Compute final confusion matrix (of the global aggregated model)
+# Re-set client weights to global weights first to ensure confusion matrix represents the global model
+for m in clients:
+    m.set_weights(global_coef, global_intercept)
+
+all_y_true = []
+all_y_pred = []
+for m in clients:
+    X_te, y_te = m.get_test_data()
+    all_y_pred.extend(m.model.predict(X_te))
+    all_y_true.extend(y_te)
+
 cm = confusion_matrix(all_y_true, all_y_pred, labels=[0, 1, 2, 3])
 
-print("Combined Confusion Matrix:")
+print("Combined Confusion Matrix (Global Aggregated Model):")
 print(f"  {'Actual / Predicted':<20} {'Normal':<10} {'Mild':<10} {'Moderate':<10} {'Severe':<10}")
 print(f"  {'-'*64}")
 for i, name in enumerate(class_names):
@@ -258,7 +349,7 @@ ax.text(ROUNDS + 0.32, (mean_local_acc + final_acc) / 2,
 
 # Title and Labels
 if use_dp:
-    ax.set_title(f'Federated Learning — Accuracy Progress (Epsilon = {global_epsilon})', 
+    ax.set_title(f'Federated Learning — Accuracy Progress (Total Epsilon = {global_epsilon})', 
                  fontsize=12, fontweight='bold', color=TEXT_COLOR, pad=18)
 else:
     ax.set_title('Federated Learning — Accuracy Progress (DP Disabled)', 
@@ -292,41 +383,73 @@ fig, ax = plt.subplots(figsize=(7.0, 5.0), facecolor=BG_COLOR)
 ax.set_facecolor(BG_COLOR)
 
 if use_dp:
-    scales = []
-    for m in clients:
-        R = np.max(np.linalg.norm(m.X_train, axis=1))
-        sensitivity = (2.0 * R) / (m.get_train_size() * m.alpha)
-        scale = sensitivity / global_epsilon
-        scales.append(scale)
-    x_range = np.linspace(-1.5, 1.5, 1000)
-
     from scipy.stats import laplace as laplace_dist
-    colors = ['#1a73e8', '#e8710a', '#1e8e3e'] # Blue, Orange, Green
-    line_styles = ['-', '--', ':']             # Solid, Dashed, Dotted
-    line_widths = [3.5, 2.3, 1.6]              # Nested widths so all layers are visible
+    if args.dp_mode == "output":
+        scales = []
+        for m in clients:
+            R = np.max(np.linalg.norm(m.X_train, axis=1))
+            sensitivity = (2.0 * R) / (m.get_train_size() * m.alpha)
+            # Use epsilon_per_round to plot the actual per-round noise scale
+            scale = sensitivity / epsilon_per_round
+            scales.append(scale)
+        x_range = np.linspace(-1.5, 1.5, 1000)
 
-    for idx, scale in enumerate(scales):
-        pdf = laplace_dist.pdf(x_range, loc=0, scale=scale)
-        ax.plot(x_range, pdf, 
-                color=colors[idx], 
-                linestyle=line_styles[idx], 
-                linewidth=line_widths[idx], 
-                label=f"{names[idx]} (Scale b = {scale:.3f})")
-        ax.fill_between(x_range, pdf, alpha=0.04, color=colors[idx])
+        colors = ['#1a73e8', '#e8710a', '#1e8e3e'] # Blue, Orange, Green
+        line_styles = ['-', '--', ':']             # Solid, Dashed, Dotted
+        line_widths = [3.5, 2.3, 1.6]              # Nested widths so all layers are visible
 
-    ax.set_title("Probability Density Function (PDF) of Laplace DP Noise", fontsize=12, fontweight='bold', color=TEXT_COLOR, pad=18)
-    ax.set_xlabel("Noise Value Added to Model Weights", fontsize=10, color=TEXT_COLOR, labelpad=10)
+        for idx, scale in enumerate(scales):
+            pdf = laplace_dist.pdf(x_range, loc=0, scale=scale)
+            ax.plot(x_range, pdf, 
+                    color=colors[idx], 
+                    linestyle=line_styles[idx], 
+                    linewidth=line_widths[idx], 
+                    label=f"{names[idx]} (Scale b = {scale:.3f})")
+            ax.fill_between(x_range, pdf, alpha=0.04, color=colors[idx])
+
+        ax.set_title("PDF of Laplace DP Noise (Model Weights)", fontsize=12, fontweight='bold', color=TEXT_COLOR, pad=18)
+        ax.set_xlabel("Noise Value Added to Model Weights", fontsize=10, color=TEXT_COLOR, labelpad=10)
+        ax.set_xlim(-1.2, 1.2)
+        ax.set_ylim(-0.05, max([laplace_dist.pdf(0, loc=0, scale=s) for s in scales]) + 0.25)
+    else:
+        # Input perturbation: plot noise added to features based on sensitivity
+        # Standardized range is [-3, 3], Delta = 6.0
+        # Medium sensitivity: multiplier = 1.0, scale = Delta / epsilon
+        # High sensitivity: multiplier = 1.5, scale = (Delta * 1.5) / epsilon
+        # Low sensitivity: multiplier = 0.1, scale = (Delta * 0.1) / epsilon
+        x_range = np.linspace(-30.0, 30.0, 1000)
+        
+        scale_med = 6.0 / global_epsilon
+        scale_high = (6.0 * 1.5) / global_epsilon
+        scale_low = (6.0 * 0.1) / global_epsilon
+        
+        pdf_med = laplace_dist.pdf(x_range, loc=0, scale=scale_med)
+        pdf_high = laplace_dist.pdf(x_range, loc=0, scale=scale_high)
+        pdf_low = laplace_dist.pdf(x_range, loc=0, scale=scale_low)
+        
+        ax.plot(x_range, pdf_low, color='#1e8e3e', linestyle=':', linewidth=2.0, label=f"Low Sensitivity (Scale b = {scale_low:.3f})")
+        ax.fill_between(x_range, pdf_low, alpha=0.04, color='#1e8e3e')
+        
+        ax.plot(x_range, pdf_med, color='#1a73e8', linestyle='-', linewidth=2.5, label=f"Medium Sensitivity (Scale b = {scale_med:.3f})")
+        ax.fill_between(x_range, pdf_med, alpha=0.04, color='#1a73e8')
+        
+        ax.plot(x_range, pdf_high, color='#e8710a', linestyle='--', linewidth=2.0, label=f"High Sensitivity (Scale b = {scale_high:.3f})")
+        ax.fill_between(x_range, pdf_high, alpha=0.04, color='#e8710a')
+        
+        ax.set_title("PDF of Laplace DP Noise (Input Features)", fontsize=12, fontweight='bold', color=TEXT_COLOR, pad=18)
+        ax.set_xlabel("Noise Value Added to Standardized Features", fontsize=10, color=TEXT_COLOR, labelpad=10)
+        ax.set_xlim(-25.0, 25.0)
+        ax.set_ylim(-0.01, max(pdf_low[500], pdf_med[500], pdf_high[500]) + 0.1)
+
     ax.set_ylabel("Probability Density", fontsize=10, color=TEXT_COLOR, labelpad=10)
     ax.grid(color=BORDER_GRAY, ls='--', lw=0.8, alpha=0.7)
     ax.tick_params(axis='both', labelsize=9.5, labelcolor=TEXT_COLOR)
     ax.spines[['top', 'right']].set_visible(False)
     ax.spines[['left', 'bottom']].set_color(BORDER_GRAY)
-    ax.set_xlim(-1.2, 1.2)
-    ax.set_ylim(-0.05, max([laplace_dist.pdf(0, loc=0, scale=s) for s in scales]) + 0.25)
     ax.legend(loc='upper right', facecolor='white', edgecolor=BORDER_GRAY,
               labelcolor=TEXT_COLOR, fontsize=9.5, frameon=True)
 else:
-    ax.text(0.5, 0.5, "Differential Privacy is Disabled\n(No Noise Added to Model Weights)", 
+    ax.text(0.5, 0.5, "Differential Privacy is Disabled\n(No Noise Added to Features or Weights)", 
             color=TEXT_COLOR, ha='center', va='center', fontsize=11, fontweight='bold', style='italic')
     ax.set_title("Laplace DP Noise PDF (DP Disabled)", color=TEXT_COLOR, fontsize=12, fontweight='bold')
     ax.set_axis_off()

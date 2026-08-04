@@ -21,6 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description="Standalone Client Evaluation")
     parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy")
     parser.add_argument("-e", "--epsilon", type=float, default=None, help="Privacy Budget (Epsilon)")
+    parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="input", help="DP Perturbation stage: 'input' or 'output'")
     args, unknown = parser.parse_known_args()
 
     use_dp = not args.no_dp
@@ -44,12 +45,13 @@ def main():
             print("Error: Epsilon must be strictly greater than 0.")
             sys.exit(1)
 
-        print(f"Differential Privacy: Enabled (Epsilon = {global_epsilon})")
+        print(f"Differential Privacy: Enabled (Epsilon = {global_epsilon}, Mode = {args.dp_mode.upper()})")
     print("================================================================\n")
 
-    m1 = Machine1(epsilon=global_epsilon)
-    m2 = Machine2(epsilon=global_epsilon)
-    m3 = Machine3(epsilon=global_epsilon)
+    eps_val = global_epsilon if use_dp else 0.0
+    m1 = Machine1(epsilon=eps_val, dp_mode=args.dp_mode)
+    m2 = Machine2(epsilon=eps_val, dp_mode=args.dp_mode)
+    m3 = Machine3(epsilon=eps_val, dp_mode=args.dp_mode)
 
     clients = [m1, m2, m3]
     names = ["Machine 1", "Machine 2", "Machine 3"]
@@ -63,7 +65,8 @@ def main():
 
     for idx, m in enumerate(clients):
         m.initialize_model()
-        m.local_train(epochs=15)
+        # Train for 100 epochs locally to achieve near-convergence for DP sensitivity mathematical guarantees
+        m.local_train(epochs=100)
 
         if use_dp:
             coef, intercept = m.get_dp_weights()
@@ -89,7 +92,35 @@ def main():
         print(f"  {names[idx]:<15} {sample_cnt:>15} {local_accuracies[idx]*100:>14.2f}%")
     print(f"  {'-'*47}\n")
 
+    # ── RISK LEVEL MAPPING & ALERTS ──
+    def map_to_risk_level(pred_class):
+        if pred_class == 0:
+            return "LOW RISK"
+        elif pred_class in [1, 2]:
+            return "MEDIUM RISK"
+        else:
+            return "HIGH RISK"
+
+    def get_health_recommendation(risk_level):
+        if risk_level == "LOW RISK":
+            return "Status: Normal. Recommendation: Maintain your daily exercise routine and healthy sleep patterns."
+        elif risk_level == "MEDIUM RISK":
+            return "Status: Mild/Moderate Event detected. Recommendation: Monitor your vital signs closely, reduce physical stress, and rest."
+        else:
+            return "Status: Severe Event detected! Alert: Immediate clinical consultation is advised. Avoid strenuous activities."
+
     class_names = ['Normal', 'Mild Event', 'Moderate Event', 'Severe Event']
+    
+    print("=================== SAMPLE RISK MAPPINGS & ALERTS ===================")
+    for idx, m in enumerate(clients):
+        X_sample, y_sample = m.get_test_data()
+        preds_sample = m.model.predict(X_sample[:1])
+        risk = map_to_risk_level(preds_sample[0])
+        rec = get_health_recommendation(risk)
+        print(f"  {names[idx]} | Pred: {preds_sample[0]} ({class_names[preds_sample[0]]}) | Risk: {risk}")
+        print(f"    - Recommendation: {rec}")
+    print()
+
     cm = confusion_matrix(all_y_true, all_y_pred, labels=[0, 1, 2, 3])
 
     print("Combined Confusion Matrix:")
