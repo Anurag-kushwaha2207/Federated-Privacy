@@ -1,31 +1,29 @@
 *****************WITH FEDERATED LEARNING******************
-python server.py                                 -> 91.27     ------------All machine DP 0.5
-python server.py --no-dp                         -> 98.92%
-python server.py -e 0.5 --dp-clients 1           -> 89.70%    ------------Only machine-1 Active DP
-python server.py -e 0.5 --dp-clients 1,2         -> 85.67%   ------------only 1,2 Machine Active DP
+python server.py                                 -> 57.80% (Avg Personalized: 98.05%)  ------------All machine DP 0.5
+python server.py --no-dp                         -> 98.53% (Avg Personalized: 98.12%)
+python server.py -e 0.5 --dp-clients 1           -> 80.96% (Avg Personalized: 97.78%)  ------------Only machine-1 Active DP
+python server.py -e 0.5 --dp-clients 1,2         -> 78.70% (Avg Personalized: 98.10%)  ------------only 1,2 Machine Active DP
 
 
-************WITHOUT FEDERATED LEARNING******************
+************WITHOUT FEDERATED LEARNING (STANDALONE)******************
 
-python machine.py                                 -> 65.88%  ----------------- machine-1                            
-                                                  -> 46.76%  ------------------machine-2
-                                                  -> 58.70%  ------------------machine-3
+python machine.py --no-dp                        -> 96.43%  ----------------- machine-1                            
+                                                 -> 99.00%  ------------------machine-2
+                                                 -> 99.23%  ------------------machine-3
 
-python machine1.py --no-dp                           98.53% ------------Machine-1 Without dp      
+python machine1.py --no-dp                          96.43% ------------Machine-1 Without dp      
 
 
 weight ----------------------------------------------33%
 
 
 *********************New Task AFTER-0.5, 1.0 Noise Add  and TEST***********************
-python server.py                                 -> 98.43     ------------All machine DP 1.0
-python server.py -e 1.0 --dp-clients 1           -> 98.63%    ------------Only machine-1 Active DP
-python server.py -e 1.0 --dp-clients 1,2         -> 99.31%    ------------only 1,2 Machine Active DP
+python server.py -e 1.0                          -> 84.69% (Avg Personalized: 98.12%)  ------------All machine DP 1.0
+python server.py -e 1.0 --dp-clients 1           -> 95.39% (Avg Personalized: 98.12%)  ------------Only machine-1 Active DP
+python server.py -e 1.0 --dp-clients 1,2         -> 89.89% (Avg Personalized: 98.12%)  ------------only 1,2 Machine Active DP
 
 
-************WITHOUT FEDERATED LEARNING******************
-python machine.py                                 -> 97.94%  ----------------- machine-1                            
-                                                  -> 97.35%  ------------------machine-2
-                                                  -> 98.82%  ------------------machine-3
-                                                  
-
+************WITHOUT FEDERATED LEARNING (STANDALONE)******************
+python machine.py -e 1.0                         -> 94.39%  ----------------- machine-1                            
+                                                 -> 94.68%  ------------------machine-2
+                                                 -> 99.81%  ------------------machine-3
