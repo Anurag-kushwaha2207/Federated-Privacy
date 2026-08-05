@@ -20,7 +20,7 @@ ALPHA       = 0.1   # Regularization parameter
 SEED        = 42
 
 class Machine3:
-    def __init__(self, epsilon=0.5, dp_mode="input"):
+    def __init__(self, epsilon=1.0, dp_mode="input"):
         self.epsilon = epsilon
         self.dp_mode = dp_mode
         self.alpha   = ALPHA
@@ -221,7 +221,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Standalone Client Model with Differential Privacy")
     parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy")
-    parser.add_argument("-e", "--epsilon", type=float, default=0.5, help="Privacy Budget (Epsilon) [default: 0.5]")
+    parser.add_argument("-e", "--epsilon", type=float, default=1.0, help="Privacy Budget (Epsilon) [default: 1.0]")
     parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="output", help="DP Perturbation stage: 'input' or 'output'")
     args = parser.parse_args()
     

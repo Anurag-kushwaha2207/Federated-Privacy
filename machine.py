@@ -32,17 +32,17 @@ def main():
     print("================================================================")
     print("Standalone Client Execution")
     if not use_dp:
-        global_epsilon = 0.5
+        global_epsilon = 1.0
         print("Differential Privacy: Disabled")
     else:
         if args.epsilon is not None:
             global_epsilon = args.epsilon
         else:
             try:
-                user_eps = input("Enter Privacy Budget (Epsilon) [default: 0.5]: ").strip()
-                global_epsilon = float(user_eps) if user_eps else 0.5
+                user_eps = input("Enter Privacy Budget (Epsilon) [default: 1.0]: ").strip()
+                global_epsilon = float(user_eps) if user_eps else 1.0
             except Exception:
-                global_epsilon = 0.5
+                global_epsilon = 1.0
 
         if global_epsilon <= 0:
             print("Error: Epsilon must be strictly greater than 0.")
