@@ -24,6 +24,7 @@ class Machine1:
         self.epsilon = epsilon
         self.dp_mode = dp_mode
         self.alpha   = ALPHA
+        self.rng     = np.random.RandomState(SEED)
         
         # Initialize Logistic Regression with SGD (L2 penalty)
         self.model = SGDClassifier(
@@ -79,6 +80,7 @@ class Machine1:
             loss='log_loss', penalty='l2', alpha=self.alpha,
             fit_intercept=True, warm_start=True, random_state=SEED
         )
+        self.rng = np.random.RandomState(SEED)
         # Call partial_fit once with dummy subset to initialize weights shape
         self.model.partial_fit(self.X_train[:4], [0, 1, 2, 3], classes=[0, 1, 2, 3])
         # Reset initialized weights to zero
@@ -140,7 +142,7 @@ class Machine1:
             scale = Delta / feat_eps
             
             # Add Laplace noise to the feature column
-            noise = np.random.laplace(loc=0.0, scale=scale, size=self.X_train[:, idx].shape)
+            noise = self.rng.laplace(loc=0.0, scale=scale, size=self.X_train[:, idx].shape)
             self.X_train[:, idx] += noise
 
     def get_dp_weights(self):
@@ -174,8 +176,8 @@ class Machine1:
         scale = sensitivity / self.epsilon
         
         # Generate and add Laplace noise
-        noise_coef = np.random.laplace(loc=0.0, scale=scale, size=coef.shape)
-        noise_intercept = np.random.laplace(loc=0.0, scale=scale, size=intercept.shape)
+        noise_coef = self.rng.laplace(loc=0.0, scale=scale, size=coef.shape)
+        noise_intercept = self.rng.laplace(loc=0.0, scale=scale, size=intercept.shape)
         
         # The scale parameter specifies the scale parameter of the Laplace distribution.
         noisy_coef = coef + noise_coef

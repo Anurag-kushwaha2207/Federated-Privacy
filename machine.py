@@ -8,7 +8,10 @@ import sys
 import os
 import argparse
 import warnings
+import numpy as np
 from sklearn.metrics import accuracy_score, confusion_matrix
+
+np.random.seed(42)
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 warnings.filterwarnings('ignore')

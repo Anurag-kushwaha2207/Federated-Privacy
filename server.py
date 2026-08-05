@@ -23,6 +23,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import accuracy_score, confusion_matrix
 
+np.random.seed(42)
+
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 warnings.filterwarnings('ignore')
 
@@ -86,12 +88,14 @@ else:
 
 ROUNDS = 5
 
-# Epsilon per round: use the full global epsilon for noise calculation each round.
-# Total composed privacy cost = K * epsilon_per_round (reported in summary).
-# Using full epsilon per round keeps noise small and accuracy drop gradual.
-# (Sequential composition is still tracked and reported in the summary.)
+# Calculate epsilon per round based on sequential composition theorem:
+# For Input DP, noise is applied once at feature level, so full budget is used once.
+# For Output DP, noise is applied across K rounds, so total budget global_epsilon is allocated as global_epsilon / ROUNDS per round.
 if use_dp:
-    epsilon_per_round = global_epsilon   # full budget per round — gradual noise
+    if args.dp_mode == "input":
+        epsilon_per_round = global_epsilon
+    else:
+        epsilon_per_round = global_epsilon / ROUNDS
 else:
     epsilon_per_round = 0.0
 
@@ -206,9 +210,10 @@ if use_dp:
     if args.dp_mode == "input":
         print(f"  Total Privacy Epsilon       : {global_epsilon:.4f} (Applied at Input Layer)")
     else:
+        total_composed_epsilon = epsilon_per_round * ROUNDS
         print(f"  Number of rounds (K)        : {ROUNDS}")
         print(f"  Epsilon per Round (eps_r)   : {epsilon_per_round:.4f}")
-        print(f"  Total Composed Epsilon      : {global_epsilon:.4f} (Sequential Composition: K * eps_r)")
+        print(f"  Total Composed Epsilon      : {total_composed_epsilon:.4f} (Sequential Composition: K * eps_r)")
 else:
     print(f"  Differential Privacy Status : DISABLED")
 print(f"  {'Model / Client':<18} {'Train Records':>15} {'Accuracy':>12}")
