@@ -1,17 +1,17 @@
 *****************WITH FEDERATED LEARNING (OUTPUT DP - DEFAULT)******************
-python server.py                                 -> 74.88% (Avg Personalized: 99.26%)  ------------All machine DP 0.5
-python server.py --no-dp                         -> 90.30% (Avg Personalized: 99.26%)
-python server.py -e 0.5 --dp-clients 1           -> 86.70% (Avg Personalized: 99.26%)  ------------Only machine-1 Active DP
-python server.py -e 0.5 --dp-clients 1,2         -> 84.30% (Avg Personalized: 99.26%)  ------------only 1,2 Machine Active DP
+python server.py                                 -> 88.49% (Avg Personalized: 96.45%)  ------------All machine DP 0.5
+python server.py --no-dp                         -> 94.55% (Avg Personalized: 96.41%)
+python server.py -e 0.5 --dp-clients 1           -> 93.46% (Avg Personalized: 96.41%)  ------------Only machine-1 Active DP
+python server.py -e 0.5 --dp-clients 1,2         -> 90.96% (Avg Personalized: 96.45%)  ------------only 1,2 Machine Active DP
 
 
 ************WITHOUT FEDERATED LEARNING (STANDALONE - NO DP)******************
 
-python machine.py --no-dp                        -> 100.00%  ----------------- machine-1                            
-                                                 -> 99.45%  ------------------machine-2
-                                                 -> 97.51%  ------------------machine-3
+python machine.py --no-dp                        -> 96.89%  ----------------- machine-1                            
+                                                 -> 96.82%  ------------------machine-2
+                                                 -> 95.51%  ------------------machine-3
 
-python machine1.py --no-dp                       -> 100.00% ------------Machine-1 Without dp      
+python machine1.py --no-dp                       -> 96.89% ------------Machine-1 Without dp      
 
 
 weight ----------------------------------------------33%
@@ -19,20 +19,20 @@ weight ----------------------------------------------33%
 
 *********************STANDALONE WITH DP (epsilon = 0.5)***********************
 
-python machine.py -e 0.5                         -> 99.45%  ----------------- machine-1                            
-                                                 -> 99.45%  ------------------machine-2
-                                                 -> 97.23%  ------------------machine-3
+python machine.py -e 0.5                         -> 96.24%  ----------------- machine-1                            
+                                                 -> 95.88%  ------------------machine-2
+                                                 -> 95.51%  ------------------machine-3
 
-python machine1.py -e 0.5                        -> 99.45% ------------Machine-1 With DP 0.5
+python machine1.py -e 0.5                        -> 96.24% ------------Machine-1 With DP 0.5
 
 
 *********************New Task AFTER-0.5, 1.0 Noise Add and TEST***********************
-python server.py -e 1.0                          -> 85.96% (Avg Personalized: 99.35%)  ------------All machine DP 1.0
-python server.py -e 1.0 --dp-clients 1           -> 88.00% (Avg Personalized: 99.26%)  ------------Only machine-1 Active DP
-python server.py -e 1.0 --dp-clients 1,2         -> 86.70% (Avg Personalized: 99.26%)  ------------only 1,2 Machine Active DP
+python server.py -e 1.0                          -> 92.52% (Avg Personalized: 96.41%)  ------------All machine DP 1.0
+python server.py -e 1.0 --dp-clients 1           -> 94.31% (Avg Personalized: 96.41%)  ------------Only machine-1 Active DP
+python server.py -e 1.0 --dp-clients 1,2         -> 93.46% (Avg Personalized: 96.41%)  ------------only 1,2 Machine Active DP
 
 
 ************WITHOUT FEDERATED LEARNING (STANDALONE - DP Epsilon 1.0)******************
-python machine.py -e 1.0                         -> 100.00%  ----------------- machine-1                            
-                                                 -> 99.45%  ------------------machine-2
-                                                 -> 97.51%  ------------------machine-3
+python machine.py -e 1.0                         -> 96.60%  ----------------- machine-1                            
+                                                 -> 96.60%  ------------------machine-2
+                                                 -> 95.51%  ------------------machine-3

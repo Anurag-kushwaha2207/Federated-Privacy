@@ -7,7 +7,7 @@ excel_path = os.path.join(base_dir, "Federeted-data.xlsx")
 
 print("Loading dataset from Excel path...")
 # Load the dataset from the specified sheet in the Excel file
-df = pd.read_excel(excel_path, sheet_name="iot_health_monitoring_dataset")
+df = pd.read_excel(excel_path, sheet_name="Oversampled_Dataset")
 
 # Features we want to keep
 feature_cols = [
@@ -16,8 +16,10 @@ feature_cols = [
     'sleep_quality', 'stress_level', 'hrv_sdnn', 'steps_count', 'calories_burned'
 ]
 
+df = df.dropna(subset=feature_cols + ['health_event']).reset_index(drop=True)
+
 X = df[feature_cols].copy()
-y = df['health_event'].copy()
+y = df['health_event'].astype(int).copy()
 
 # Build a clean DataFrame with raw features (removed global StandardScaler to prevent data leakage)
 clean_df = pd.DataFrame(X, columns=feature_cols)
@@ -38,7 +40,7 @@ def partition_data_non_iid_equal_sizes(df, n_clients=3, alpha=0.5, random_seed=4
     client_indices = [[] for _ in range(n_clients)]
     
     # Enforce minimum samples per class per client to prevent degenerate models
-    min_samples_per_class = 50
+    min_samples_per_class = 1000
     remaining_capacity = list(target_sizes)
     
     # 1. Allocate minimum representation of each class to each client
