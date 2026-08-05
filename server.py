@@ -162,7 +162,8 @@ for r in range(1, ROUNDS + 1):
                     print(f"    - {names[idx]}: (Input DP Enabled, Epsilon = {global_epsilon:.4f}, Features Perturbed locally)")
                 else:
                     # Calculate maximum L2 norm of the features for printing
-                    R = np.max(np.linalg.norm(m.X_train, axis=1))
+                    R_CLIP = 5.0
+                    R = min(np.max(np.linalg.norm(m.X_train, axis=1)), R_CLIP)
                     sensitivity = (2.0 * R) / (m.get_train_size() * m.alpha)
                     scale = sensitivity / epsilon_per_round
                     print(f"    - {names[idx]}: sensitivity = {sensitivity:.4f}, noise scale = {scale:.4f}, max_norm(R) = {R:.4f} (DP Enabled, Epsilon per round = {epsilon_per_round:.4f})")
@@ -390,7 +391,8 @@ if use_dp:
     if args.dp_mode == "output":
         scales = []
         for m in clients:
-            R = np.max(np.linalg.norm(m.X_train, axis=1))
+            R_CLIP = 5.0
+            R = min(np.max(np.linalg.norm(m.X_train, axis=1)), R_CLIP)
             sensitivity = (2.0 * R) / (m.get_train_size() * m.alpha)
             # Use epsilon_per_round to plot the actual per-round noise scale
             scale = sensitivity / epsilon_per_round

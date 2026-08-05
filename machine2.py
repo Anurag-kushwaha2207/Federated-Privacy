@@ -168,8 +168,9 @@ class Machine2:
 
         coef, intercept = self.get_weights()
         
-        # Calculate maximum L2 norm of the features
-        R = np.max(np.linalg.norm(self.X_train, axis=1))
+        # Calculate maximum L2 norm of the features with norm clipping (R_CLIP = 5.0)
+        R_CLIP = 5.0
+        R = min(np.max(np.linalg.norm(self.X_train, axis=1)), R_CLIP)
         
         # Calculate sensitivity and noise scale
         sensitivity = (2.0 * R) / (self.n_samples * self.alpha)
@@ -207,7 +208,8 @@ class Machine2:
         if self.dp_mode == "input":
             return f"Input Perturbation DP (Local DP) | Epsilon={self.epsilon:.4f} | Mode=Feature-Level Sensitivity"
         
-        R = np.max(np.linalg.norm(self.X_train, axis=1))
+        R_CLIP = 5.0
+        R = min(np.max(np.linalg.norm(self.X_train, axis=1)), R_CLIP)
         sensitivity = (2.0 * R) / (self.n_samples * self.alpha)
         scale = sensitivity / self.epsilon
         return f"Output Perturbation DP | Sensitivity={sensitivity:.6f} | Scale={scale:.6f} | MaxNorm(R)={R:.4f}"
