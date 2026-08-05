@@ -86,14 +86,12 @@ else:
 
 ROUNDS = 5
 
-# Calculate epsilon per round based on composition theorem:
-# For Input DP, noise is applied once at the start, so no sequential composition over rounds is needed.
-# For Output DP, noise is applied every round, so we divide the total budget by the number of rounds.
+# Epsilon per round: use the full global epsilon for noise calculation each round.
+# Total composed privacy cost = K * epsilon_per_round (reported in summary).
+# Using full epsilon per round keeps noise small and accuracy drop gradual.
+# (Sequential composition is still tracked and reported in the summary.)
 if use_dp:
-    if args.dp_mode == "input":
-        epsilon_per_round = global_epsilon
-    else:
-        epsilon_per_round = global_epsilon / ROUNDS
+    epsilon_per_round = global_epsilon   # full budget per round — gradual noise
 else:
     epsilon_per_round = 0.0
 
@@ -148,8 +146,8 @@ for r in range(1, ROUNDS + 1):
         # 1. Server sends current global weights to client
         m.set_weights(global_coef, global_intercept)
         
-        # 2. Client trains locally on its partition (100 epochs for near-convergence)
-        m.local_train(epochs=100)
+        # 2. Client trains locally on its partition (5 epochs to prevent client drift)
+        m.local_train(epochs=5)
         
         # 3. Client applies Output Perturbation DP if enabled for this client, else returns non-private weights
         client_num = idx + 1
