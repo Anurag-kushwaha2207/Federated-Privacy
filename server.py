@@ -395,7 +395,9 @@ if use_dp:
             # Use epsilon_per_round to plot the actual per-round noise scale
             scale = sensitivity / epsilon_per_round
             scales.append(scale)
-        x_range = np.linspace(-1.5, 1.5, 1000)
+        max_scale = max(scales)
+        x_limit = max(3.0 * max_scale, 0.5)
+        x_range = np.linspace(-x_limit, x_limit, 1000)
 
         colors = ['#1a73e8', '#e8710a', '#1e8e3e'] # Blue, Orange, Green
         line_styles = ['-', '--', ':']             # Solid, Dashed, Dotted
@@ -410,10 +412,11 @@ if use_dp:
                     label=f"{names[idx]} (Scale b = {scale:.3f})")
             ax.fill_between(x_range, pdf, alpha=0.04, color=colors[idx])
 
+        max_peak = max([laplace_dist.pdf(0, loc=0, scale=s) for s in scales])
         ax.set_title("PDF of Laplace DP Noise (Model Weights)", fontsize=12, fontweight='bold', color=TEXT_COLOR, pad=18)
         ax.set_xlabel("Noise Value Added to Model Weights", fontsize=10, color=TEXT_COLOR, labelpad=10)
-        ax.set_xlim(-1.2, 1.2)
-        ax.set_ylim(-0.05, max([laplace_dist.pdf(0, loc=0, scale=s) for s in scales]) + 0.25)
+        ax.set_xlim(-x_limit, x_limit)
+        ax.set_ylim(-0.02 * max_peak, max_peak * 1.18)
     else:
         # Input perturbation: plot noise added to features based on sensitivity
         # Standardized range is [-3, 3], Delta = 6.0
