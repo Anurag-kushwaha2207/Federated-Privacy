@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-excel_path = os.path.join(base_dir, "2nd data set.xlsx")
+excel_path = os.path.join(base_dir, "Federeted-data.xlsx")
 
 print("Loading dataset from Excel path...")
 # Load the dataset from the specified sheet in the Excel file
@@ -33,7 +33,8 @@ def partition_data_non_iid_equal_sizes(df, n_clients=3, alpha=0.5, random_seed=4
     total_samples = len(df)
     
     # Target sizes to keep dataset sizes equal across machines
-    target_sizes = [1700, 1700, total_samples - 3400]
+    base_size = total_samples // n_clients
+    target_sizes = [base_size] * (n_clients - 1) + [total_samples - base_size * (n_clients - 1)]
     client_indices = [[] for _ in range(n_clients)]
     
     # Enforce minimum samples per class per client to prevent degenerate models
