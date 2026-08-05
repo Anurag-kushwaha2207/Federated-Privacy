@@ -6,64 +6,9 @@ Privacy is guaranteed using **Laplace Output Differential Privacy (DP)** with fe
 
 ---
 
-## System Architecture
-
-The overall pipeline consists of local data ingestion, feature norm clipping, differential privacy noise calibration, local SGD training, central FedAvg weight aggregation, and local model personalization.
-
-![System Architecture Diagram](architecture_diagram.png)
-
-```mermaid
-flowchart TD
-    classDef startNode fill:#E8F5E9,stroke:#2E7D32,stroke-width:1.5px,color:#1B5E20,font-weight:bold;
-    classDef deviceNode fill:#E3F2FD,stroke:#1565C0,stroke-width:1.5px,color:#0D47A1,font-weight:bold;
-    classDef dpNode fill:#FFF3E0,stroke:#EF6C00,stroke-width:1.5px,color:#E65100,font-weight:bold;
-    classDef privData fill:#F1F8E9,stroke:#33691E,stroke-width:1.5px,color:#1B5E20,font-weight:bold;
-    classDef trainNode fill:#E0F7FA,stroke:#00838F,stroke-width:1.5px,color:#006064,font-weight:bold;
-    classDef serverNode fill:#FCE4EC,stroke:#C2185B,stroke-width:1.5px,color:#880E4F,font-weight:bold;
-    classDef outputNode fill:#F3E5F5,stroke:#7B1FA2,stroke-width:1.5px,color:#4A148C,font-weight:bold;
-    classDef alertNode fill:#F1F8E9,stroke:#558B2F,stroke-width:1.5px,color:#33691E,font-weight:bold;
-    classDef persNode fill:#FCE4EC,stroke:#AD1457,stroke-width:1.5px,color:#880E4F,font-weight:bold;
-
-    Start([Start: Local Training Cycle]):::startNode
-
-    subgraph Client1 ["Watch 1: Edge IoT Device"]
-        D1["Data Collection Layer\n(Heart Rate, BP, Temp, SpO2, Activity)"]:::deviceNode
-        S1["Identify Sensitive Telemetry\n(Health & Personal Vitals)"]:::deviceNode
-        DP1["Differential Privacy Layer\n(Controlled Laplace Noise)"]:::dpNode
-        P1["Privacy-Protected Local Features"]:::privData
-        T1["Local Model Training\n(SGDClassifier on Device)"]:::trainNode
-        U1["Send Noisy Model Weights =>\n(coef_, intercept_)"]:::deviceNode
-    end
-
-    subgraph Client2 ["Watch 2: Edge IoT Device"]
-        D2["Data Collection Layer\n(Heart Rate, BP, Temp, SpO2, Activity)"]:::deviceNode
-        S2["Identify Sensitive Telemetry\n(Health & Personal Vitals)"]:::deviceNode
-        DP2["Differential Privacy Layer\n(Controlled Laplace Noise)"]:::dpNode
-        P2["Privacy-Protected Local Features"]:::privData
-        T2["Local Model Training\n(SGDClassifier on Device)"]:::trainNode
-        U2["Send Noisy Model Weights =>\n(coef_, intercept_)"]:::deviceNode
-    end
-
-    Server["Federated Aggregator Server\n(FedAvg: Average Weights Only)\nW_global = 1/N * Σ W_i"]:::serverNode
-    GlobalModel["Global Federated Model\n(Aggregated Parameter Set)"]:::serverNode
-
-    subgraph Evaluation ["Local Inference & Risk Assessment"]
-        O1["Privacy-Safe Output Prediction\n(Risk: Low / Medium / High)"]:::outputNode
-        A1["Health Alert & Recommendation\n(On-Device Patient Alert)"]:::alertNode
-        Pers1["Personalized Local Model\n(Local Fine-Tuning on Client Data)"]:::persNode
-    end
-
-    Start --> D1 & D2
-    D1 --> S1 --> DP1 --> P1 --> T1 --> U1
-    D2 --> S2 --> DP2 --> P2 --> T2 --> U2
-    U1 & U2 --> Server --> GlobalModel
-    GlobalModel --> O1 --> A1 --> Pers1
-    Pers1 -.->|Next Communication Round| T1
-```
-
----
-
 ## Methodology & Mathematical Formulation
+
+The system operates across decentralized client nodes (Machine 1, Machine 2, Machine 3) with central weight aggregation via Federated Averaging (**FedAvg**).
 
 ### 1. Feature Norm Clipping
 To bound the maximum impact of any single data point (sensitivity), feature vectors $x_i$ are constrained by an $L_2$ threshold $R_{\text{clip}} = 5.0$:
@@ -129,7 +74,6 @@ The system was evaluated on a clean dataset of 20,721 records partitioned among 
 ## Repository Structure
 
 ```text
-├── architecture_diagram.png    # Flowchart diagram illustrating the system architecture
 ├── README.md                   # Project documentation and reproduction guide
 ├── run.txt                     # Plaintext log of verified experiment results
 ├── server.py                   # Central server script for FedAvg aggregation and evaluation
