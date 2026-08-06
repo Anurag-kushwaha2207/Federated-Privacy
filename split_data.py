@@ -3,11 +3,11 @@ import numpy as np
 import os
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-excel_path = os.path.join(base_dir, "Federeted-data.xlsx")
+excel_path = os.path.join(base_dir, "health_data_balanced_after_overfitting.xlsx")
 
 print("Loading dataset from Excel path...")
 # Load the dataset from the specified sheet in the Excel file
-df = pd.read_excel(excel_path, sheet_name="Oversampled_Dataset")
+df = pd.read_excel(excel_path, sheet_name="Balanced_Data")
 
 # Features we want to keep
 feature_cols = [
@@ -40,7 +40,7 @@ def partition_data_non_iid_equal_sizes(df, n_clients=3, alpha=0.5, random_seed=4
     client_indices = [[] for _ in range(n_clients)]
     
     # Enforce minimum samples per class per client to prevent degenerate models
-    min_samples_per_class = 1000
+    min_samples_per_class = 300
     remaining_capacity = list(target_sizes)
     
     # 1. Allocate minimum representation of each class to each client

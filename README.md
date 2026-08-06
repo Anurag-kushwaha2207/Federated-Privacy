@@ -38,55 +38,55 @@ $$W_{\text{private}} = W_{\text{local}} + \text{Laplace}\left(0, \frac{\Delta W}
 
 ## Experimental Setup & Benchmark Results
 
-The system was evaluated on a clean dataset of 20,721 records partitioned among 3 client machines (6,907 samples per client) using a non-IID Dirichlet distribution ($\alpha = 1.0$).
+The system was evaluated on a clean dataset of 6,000 records (`health_data_balanced_after_overfitting.xlsx`) partitioned among 3 client machines (2,000 samples per client) using a non-IID Dirichlet distribution ($\alpha = 1.0$).
 
 ### 1. Federated Learning Benchmarks
 
 | Command | Privacy Configuration | Global Accuracy | Average Personalized Accuracy |
 |:---|:---|:---:|:---:|
-| `python server.py` | Differential Privacy Enabled ($\epsilon = 1.0$, Default) | **92.52%** | **96.41%** |
-| `python server.py --no-dp` | Non-Private Baseline | **94.55%** | **96.41%** |
-| `python server.py -e 1.0 --dp-clients 1` | Heterogeneous DP (Client 1 Active) | **94.31%** | **96.41%** |
-| `python server.py -e 1.0 --dp-clients 1,2` | Heterogeneous DP (Clients 1 & 2 Active) | **93.46%** | **96.41%** |
+| `python server.py` | Differential Privacy Enabled ($\epsilon = 1.0$, Default) | **84.08%** | **97.83%** |
+| `python server.py --no-dp` | Non-Private Baseline | **96.42%** | **97.92%** |
+| `python server.py -e 1.0 --dp-clients 1` | Heterogeneous DP (Client 1 Active) | **94.92%** | **97.92%** |
+| `python server.py -e 1.0 --dp-clients 1,2` | Heterogeneous DP (Clients 1 & 2 Active) | **90.75%** | **97.75%** |
 
 ### 2. Standalone Client Benchmarks (Local Training Only)
 
 | Command | Client | Differential Privacy | Test Accuracy |
 |:---|:---|:---:|:---:|
-| `python machine.py --no-dp` | Machine 1 | Disabled | **96.89%** |
-| `python machine.py --no-dp` | Machine 2 | Disabled | **96.82%** |
-| `python machine.py --no-dp` | Machine 3 | Disabled | **95.51%** |
-| `python machine.py` | Machine 1 | Enabled ($\epsilon = 1.0$) | **96.60%** |
-| `python machine.py` | Machine 2 | Enabled ($\epsilon = 1.0$) | **96.60%** |
-| `python machine.py` | Machine 3 | Enabled ($\epsilon = 1.0$) | **95.51%** |
+| `python machine.py --no-dp` | Machine 1 | Disabled | **98.25%** |
+| `python machine.py --no-dp` | Machine 2 | Disabled | **97.25%** |
+| `python machine.py --no-dp` | Machine 3 | Disabled | **97.00%** |
+| `python machine.py` | Machine 1 | Enabled ($\epsilon = 1.0$) | **98.75%** |
+| `python machine.py` | Machine 2 | Enabled ($\epsilon = 1.0$) | **97.25%** |
+| `python machine.py` | Machine 3 | Enabled ($\epsilon = 1.0$) | **96.75%** |
 
 ### 3. Comparison at Budget $\epsilon = 0.5$
 
 | Command | Configuration | Global Accuracy | Average Personalized Accuracy |
 |:---|:---|:---:|:---:|
-| `python server.py -e 0.5` | All Clients Active DP ($\epsilon = 0.5$) | **88.49%** | **96.45%** |
-| `python server.py -e 0.5 --dp-clients 1` | Client 1 Active DP ($\epsilon = 0.5$) | **93.46%** | **96.41%** |
-| `python server.py -e 0.5 --dp-clients 1,2` | Clients 1 & 2 Active DP ($\epsilon = 0.5$) | **90.96%** | **96.45%** |
-| `python machine.py -e 0.5` | Standalone Clients ($\epsilon = 0.5$) | **96.24% / 95.88% / 95.51%** | — |
+| `python server.py -e 0.5` | All Clients Active DP ($\epsilon = 0.5$) | **57.17%** | **97.75%** |
+| `python server.py -e 0.5 --dp-clients 1` | Client 1 Active DP ($\epsilon = 0.5$) | **90.75%** | **97.75%** |
+| `python server.py -e 0.5 --dp-clients 1,2` | Clients 1 & 2 Active DP ($\epsilon = 0.5$) | **72.42%** | **97.83%** |
+| `python machine.py -e 0.5` | Standalone Clients ($\epsilon = 0.5$) | **98.50% / 96.50% / 96.25%** | — |
 
 ---
 
 ## Repository Structure
 
 ```text
-├── README.md                   # Project documentation and reproduction guide
-├── run.txt                     # Plaintext log of verified experiment results
-├── server.py                   # Central server script for FedAvg aggregation and evaluation
-├── split_data.py               # Data partitioning script implementing non-IID Dirichlet split
-├── machine.py                  # Runner script for standalone client training and evaluation
-├── machine1.py                 # Client 1 implementation
-├── machine2.py                 # Client 2 implementation
-├── machine3.py                 # Client 3 implementation
-├── Federeted-data.xlsx         # Primary Excel dataset containing patient telemetry
-├── plot_accuracy.png           # Accuracy progression across communication rounds
-├── plot_dp_laplace.png         # Laplace noise scale curves for different epsilon values
-├── plot_dataset_sizes.png      # Label distribution plot for each client partition
-└── plot_confusion_matrix.png   # Multi-class confusion matrix on global model test set
+├── README.md                                 # Project documentation and reproduction guide
+├── run.txt                                   # Plaintext log of verified experiment results
+├── server.py                                 # Central server script for FedAvg aggregation and evaluation
+├── split_data.py                             # Data partitioning script implementing non-IID Dirichlet split
+├── machine.py                                # Runner script for standalone client training and evaluation
+├── machine1.py                               # Client 1 implementation
+├── machine2.py                               # Client 2 implementation
+├── machine3.py                               # Client 3 implementation
+├── health_data_balanced_after_overfitting.xlsx # Primary Excel dataset containing patient telemetry
+├── plot_accuracy.png                         # Accuracy progression across communication rounds
+├── plot_dp_laplace.png                       # Laplace noise scale curves for different epsilon values
+├── plot_dataset_sizes.png                    # Label distribution plot for each client partition
+└── plot_confusion_matrix.png                 # Multi-class confusion matrix on global model test set
 ```
 
 ---
