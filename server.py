@@ -351,8 +351,8 @@ plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_accuracy.png"), dpi=300)
 plt.close()
 
-# Plot 2: DP Laplace Distribution
-fig, ax = plt.subplots(figsize=(8, 5), facecolor=fig_bg)
+# Plot 2: DP Laplace Distribution (Research Paper Vertical Column Aspect Ratio)
+fig, ax = plt.subplots(figsize=(5.5, 6.2), facecolor=fig_bg)
 ax.set_facecolor(card_bg)
 from scipy.stats import laplace as laplace_dist
 if use_dp and args.dp_mode == "output":
@@ -376,7 +376,7 @@ if use_dp and args.dp_mode == "output":
         ax.fill_between(x_range, pdf, alpha=0.04, color=colors[idx])
 
     max_peak = max([laplace_dist.pdf(0, loc=0, scale=s) for s in scales])
-    ax.set_title("PDF of Laplace DP Noise (Single-Release Model Weights)", fontsize=12, fontweight='bold', color=TEXT_COLOR, pad=18)
+    ax.set_title("PDF of Laplace DP Noise\n(Single-Release Model Weights)", fontsize=11, fontweight='bold', color=TEXT_COLOR, pad=12)
     ax.set_xlabel("Noise Value Added to Model Weights", fontsize=10, color=TEXT_COLOR, labelpad=10)
     ax.set_xlim(-x_limit, x_limit)
     ax.set_ylim(-0.02 * max_peak, max_peak * 1.18)
