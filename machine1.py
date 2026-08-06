@@ -50,9 +50,10 @@ class Machine1:
 
     def load_data(self):
         """
-        SYNTHETIC-AWARE LEAKAGE-SAFE DATA SPLIT WITH GUARANTEED 0% OVERLAP:
+        SYNTHETIC-AWARE LEAKAGE-SAFE DATA SPLIT WITH EXPANDED REAL TEST SET:
         1. Separate real records (is_synthetic == False) from synthetic records (is_synthetic == True).
-        2. Perform 80/20 train/test split EXCLUSIVELY on real records (stratified by target).
+        2. Perform 65/35 train/test split EXCLUSIVELY on real records (stratified by target).
+           Expanded test_size=0.35 yields a robust evaluation set of ~806 real patient records across clients.
         3. Place synthetic records in local training set for class balance.
         4. Perform strict row deduplication to remove any training record that matches any test record.
         This guarantees 100% real unseen test set and EXACT 0.00% data leakage/overlap.
@@ -76,9 +77,9 @@ class Machine1:
         X_real = real_df[feature_cols].values
         y_real = self.le.transform(real_df["Daily_Health_Condition"].values)
 
-        # Train/test split ONLY on real records (test set = 100% real unseen data)
+        # Train/test split ONLY on real records with test_size=0.35 (test set = 100% real unseen data)
         X_tr_real, X_te_real, y_tr_real, y_te_real = train_test_split(
-            X_real, y_real, test_size=0.20, random_state=SEED, stratify=y_real
+            X_real, y_real, test_size=0.35, random_state=SEED, stratify=y_real
         )
 
         if not synth_df.empty:
