@@ -392,8 +392,8 @@ plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_dp_laplace.png"), dpi=300)
 plt.close()
 
-# Plot 3: Stacked Bar Chart for Dataset Records Distribution (Matching Screenshot 2)
-fig, ax = plt.subplots(figsize=(8.5, 6), facecolor=fig_bg)
+# Plot 3: Stacked Bar Chart for Dataset Records Distribution (Research Paper Vertical Column Aspect Ratio)
+fig, ax = plt.subplots(figsize=(5.5, 6.2), facecolor=fig_bg)
 ax.set_facecolor(card_bg)
 
 train_sizes = [m.get_train_size() for m in clients]
@@ -403,8 +403,8 @@ x_indices = np.arange(len(names))
 bar_width = 0.45
 
 # Stacked bars: Train (Blue) at bottom, Test (Green) on top
-bars_train = ax.bar(x_indices, train_sizes, width=bar_width, label='Training Data (80%)', color='#1a73e8', edgecolor='none')
-bars_test  = ax.bar(x_indices, test_sizes,  width=bar_width, bottom=train_sizes, label='Test Data (20%)', color='#2e7d32', edgecolor='none')
+bars_train = ax.bar(x_indices, train_sizes, width=bar_width, label='Training Data', color='#1a73e8', edgecolor='none')
+bars_test  = ax.bar(x_indices, test_sizes,  width=bar_width, bottom=train_sizes, label='Real Test Data (Unseen)', color='#2e7d32', edgecolor='none')
 
 # Labels inside Blue bar (Training)
 for idx, (bar, t_cnt) in enumerate(zip(bars_train, train_sizes)):
@@ -423,7 +423,7 @@ for idx, (bar, te_cnt) in enumerate(zip(bars_test, test_sizes)):
     ax.text(bar.get_x() + bar.get_width()/2.0, y_pos, f"{te_cnt}\n({pct:.0f}%)", 
             ha='center', va='center', fontsize=9.5, fontweight='bold', color='#ffffff')
 
-ax.set_title("Dataset Records Distribution Across Machines", fontsize=13, fontweight='bold', color=TEXT_COLOR, pad=18)
+ax.set_title("Dataset Records Distribution\nAcross Client Nodes", fontsize=11, fontweight='bold', color=TEXT_COLOR, pad=12)
 ax.set_xlabel("Client Node", fontsize=10, color=TEXT_COLOR, labelpad=10)
 ax.set_ylabel("Number of Records", fontsize=10, color=TEXT_COLOR, labelpad=10)
 ax.set_xticks(x_indices)
