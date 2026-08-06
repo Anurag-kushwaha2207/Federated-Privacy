@@ -51,6 +51,7 @@ parser.add_argument("--no-dp", action="store_true", help="Run without Differenti
 parser.add_argument("-e", "--epsilon", type=float, default=None, help="Privacy Budget (Epsilon / ε) to use directly without prompting")
 parser.add_argument("--dp-clients", type=str, default="1,2,3", help="Comma-separated list of machine numbers to apply DP (e.g. 1 or 1,2)")
 parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="output", help="DP Perturbation stage: 'input' (raw features) or 'output' (model weights)")
+parser.add_argument("--verbose", action="store_true", help="Print sample risk alerts and ASCII confusion matrix in terminal")
 args, unknown = parser.parse_known_args()
 
 use_dp = not args.no_dp
@@ -251,40 +252,42 @@ for idx, m in enumerate(clients):
 avg_pers_acc = np.mean(personalized_accuracies)
 print(f"  Average Personalized Accuracy: {avg_pers_acc*100:.2f}%\n")
 
-# ── STEP 6: Sample Risk Mappings ──
-print("=================== SAMPLE RISK MAPPINGS & ALERTS ===================")
-print("Displaying rule-based health recommendations from predicted classes...")
-print("-" * 69)
-
-class_names_map = {0: "Normal", 1: "Mild Event", 2: "Moderate Event", 3: "Severe Event"}
-sample_x, sample_y = m1.get_test_data()
-sample_preds = m1.model.predict(sample_x[:4])
-
-def get_health_recommendation(pred_class):
-    if pred_class == 0:
-        return "LOW RISK", "Status: Normal. Vital signs are within baseline limits. Continue standard monitoring."
-    elif pred_class in [1, 2]:
-        return "MEDIUM RISK", "Status: Mild/Moderate Event detected. Recommendation: Monitor vital signs closely, reduce stress, and rest."
-    else:
-        return "HIGH RISK", "Status: Severe Event detected! Alert: Immediate clinical consultation is advised."
-
-for idx, p in enumerate(sample_preds):
-    risk_level, alert_msg = get_health_recommendation(p)
-    print(f"  Sample {idx+1} | Predicted: {p} ({class_names_map[p]}) | Risk Level: {risk_level}")
-    print(f"    - Alert/Recommendation: {alert_msg}")
-
-print(f"\nCombined Confusion Matrix (Global Aggregated Model):")
-print(f"  {'Actual / Predicted':<20} {'Normal':<10} {'Mild':<10} {'Moderate':<10} {'Severe':<10}")
-print("  " + "-" * 64)
-
+# ── STEP 6: Confusion Matrix & Optional Sample Risk Mappings ──
 cm = confusion_matrix(all_y_true, all_y_pred)
 labels = ["Normal", "Mild Event", "Moderate Event", "Severe Event"]
-for i, label in enumerate(labels):
-    row_str = f"  {label:<20}"
-    for j in range(4):
-        val = cm[i][j] if i < len(cm) and j < len(cm[i]) else 0
-        row_str += f"{val:<10}"
-    print(row_str)
+
+if args.verbose:
+    print("=================== SAMPLE RISK MAPPINGS & ALERTS ===================")
+    print("Displaying rule-based health recommendations from predicted classes...")
+    print("-" * 69)
+
+    class_names_map = {0: "Normal", 1: "Mild Event", 2: "Moderate Event", 3: "Severe Event"}
+    sample_x, sample_y = m1.get_test_data()
+    sample_preds = m1.model.predict(sample_x[:4])
+
+    def get_health_recommendation(pred_class):
+        if pred_class == 0:
+            return "LOW RISK", "Status: Normal. Vital signs are within baseline limits. Continue standard monitoring."
+        elif pred_class in [1, 2]:
+            return "MEDIUM RISK", "Status: Mild/Moderate Event detected. Recommendation: Monitor vital signs closely, reduce stress, and rest."
+        else:
+            return "HIGH RISK", "Status: Severe Event detected! Alert: Immediate clinical consultation is advised."
+
+    for idx, p in enumerate(sample_preds):
+        risk_level, alert_msg = get_health_recommendation(p)
+        print(f"  Sample {idx+1} | Predicted: {p} ({class_names_map[p]}) | Risk Level: {risk_level}")
+        print(f"    - Alert/Recommendation: {alert_msg}")
+
+    print(f"\nCombined Confusion Matrix (Global Aggregated Model):")
+    print(f"  {'Actual / Predicted':<20} {'Normal':<10} {'Mild':<10} {'Moderate':<10} {'Severe':<10}")
+    print("  " + "-" * 64)
+
+    for i, label in enumerate(labels):
+        row_str = f"  {label:<20}"
+        for j in range(4):
+            val = cm[i][j] if i < len(cm) and j < len(cm[i]) else 0
+            row_str += f"{val:<10}"
+        print(row_str)
 
 # ── STEP 7: Plots & Visualizations ──
 print("\nGenerating final training and accuracy plots...")
