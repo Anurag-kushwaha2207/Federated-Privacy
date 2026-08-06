@@ -289,23 +289,61 @@ for i, label in enumerate(labels):
 # ── STEP 7: Plots & Visualizations ──
 print("\nGenerating final training and accuracy plots...")
 plt.style.use('default')
-fig_bg = '#f8f9fa'
+fig_bg = '#ffffff'
 card_bg = '#ffffff'
 TEXT_COLOR = '#202124'
 
-# Plot 1: Accuracy Curve
-fig, ax = plt.subplots(figsize=(8, 5), facecolor=fig_bg)
+# Plot 1: Accuracy Curve with Baseline, Shaded Region, Callouts, and Gap Arrow (Matching Screenshot 1)
+fig, ax = plt.subplots(figsize=(8.5, 6), facecolor=fig_bg)
 ax.set_facecolor(card_bg)
-rounds_x = list(range(1, ROUNDS + 1))
-acc_pct = [a * 100 for a in history_acc]
-ax.plot(rounds_x, acc_pct, marker='o', color='#1a73e8', linewidth=2.5, markersize=8, label='FedAvg Global Model')
-ax.set_title("Federated Learning Global Model Accuracy across Rounds", fontsize=12, fontweight='bold', pad=15)
-ax.set_xlabel("Communication Round", fontsize=10, labelpad=8)
-ax.set_ylabel("Global Test Accuracy (%)", fontsize=10, labelpad=8)
+
+rounds_x = [1, 2, 3, 4, 5]
+history_acc_pct = [a * 100 for a in history_acc]
+baseline_acc_pct = np.mean(local_accuracies) * 100
+
+# Red dashed baseline line
+ax.axhline(y=baseline_acc_pct, color='#d93025', linestyle='--', linewidth=2.2, 
+           label=f'Mean Local Baseline (Standalone Avg) = {baseline_acc_pct:.2f}%')
+
+# Blue FedAvg curve
+ax.plot(rounds_x, history_acc_pct, color='#1a73e8', linewidth=3.0, marker='o', 
+        markersize=9, markerfacecolor='#ffffff', markeredgecolor='#1a73e8', markeredgewidth=2.5,
+        label='FedAvg Global Model Accuracy (Federated Learning)')
+
+# Shaded background region between FedAvg curve and baseline
+ax.fill_between(rounds_x, history_acc_pct, baseline_acc_pct, color='#e8f0fe', alpha=0.6)
+
+# Callout boxes on each round node
+for idx, (rx, acc) in enumerate(zip(rounds_x, history_acc_pct)):
+    ax.annotate(f"{acc:.2f}%", (rx, acc),
+                xytext=(0, 10 if idx % 2 == 0 else -18), textcoords='offset points',
+                ha='center', fontsize=9, fontweight='bold', color='#202124',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='#ffffff', edgecolor='#dadce0', alpha=0.9))
+
+# Gap annotation arrow on final round
+final_acc = history_acc_pct[-1]
+gap = baseline_acc_pct - final_acc
+if abs(gap) > 0.05:
+    ax.annotate(f"Gap\n{gap:.2f}%", 
+                xy=(5, final_acc), 
+                xytext=(5, (final_acc + baseline_acc_pct) / 2.0),
+                arrowprops=dict(arrowstyle='<->', color='#70757a', lw=1.5),
+                ha='center', va='center', fontsize=8.5, color='#5f6368',
+                bbox=dict(boxstyle='square,pad=0.2', facecolor='#ffffff', edgecolor='none', alpha=0.8))
+
+ax.set_title(f"Federated Learning — Accuracy Progress (Total Epsilon = {global_epsilon if use_dp else 'Disabled'})", 
+             fontsize=12, fontweight='bold', color=TEXT_COLOR, pad=18)
+ax.set_xlabel("Communication Round", fontsize=10, color=TEXT_COLOR, labelpad=10)
+ax.set_ylabel("Combined Test Accuracy (%)", fontsize=10, color=TEXT_COLOR, labelpad=10)
 ax.set_xticks(rounds_x)
-ax.set_ylim(min(acc_pct) - 5, max(acc_pct) + 5)
-ax.grid(True, linestyle='--', alpha=0.5)
-ax.legend(loc='lower right')
+ax.set_xticklabels([f"Round {r}" for r in rounds_x], fontsize=9)
+
+y_min = min(min(history_acc_pct), baseline_acc_pct) - 5
+y_max = max(max(history_acc_pct), baseline_acc_pct) + 5
+ax.set_ylim(max(0, y_min), min(100, y_max))
+
+ax.grid(True, linestyle='--', alpha=0.4)
+ax.legend(loc='lower right', frameon=True, facecolor=card_bg, edgecolor='#dadce0', fontsize=9)
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_accuracy.png"), dpi=300)
 plt.close()
@@ -351,35 +389,47 @@ plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_dp_laplace.png"), dpi=300)
 plt.close()
 
-# Plot 3: Dataset Sizes (Train vs Test Breakdown)
-fig, ax = plt.subplots(figsize=(8.5, 5), facecolor=fig_bg)
+# Plot 3: Stacked Bar Chart for Dataset Records Distribution (Matching Screenshot 2)
+fig, ax = plt.subplots(figsize=(8.5, 6), facecolor=fig_bg)
 ax.set_facecolor(card_bg)
 
 train_sizes = [m.get_train_size() for m in clients]
 test_sizes  = [len(m.get_test_data()[1]) for m in clients]
 
 x_indices = np.arange(len(names))
-bar_width = 0.35
+bar_width = 0.45
 
-bars_train = ax.bar(x_indices - bar_width/2, train_sizes, width=bar_width, label='Train Records', color='#1a73e8', edgecolor='none')
-bars_test  = ax.bar(x_indices + bar_width/2, test_sizes,  width=bar_width, label='Test Records (100% Real)', color='#e8710a', edgecolor='none')
+# Stacked bars: Train (Blue) at bottom, Test (Green) on top
+bars_train = ax.bar(x_indices, train_sizes, width=bar_width, label='Training Data (80%)', color='#1a73e8', edgecolor='none')
+bars_test  = ax.bar(x_indices, test_sizes,  width=bar_width, bottom=train_sizes, label='Test Data (20%)', color='#2e7d32', edgecolor='none')
 
-for bar in bars_train:
-    yval = bar.get_height()
-    ax.text(bar.get_x() + bar.get_width()/2.0, yval + 30, f"{yval}", ha='center', va='bottom', fontsize=9, fontweight='bold', color='#1a73e8')
+# Labels inside Blue bar (Training)
+for idx, (bar, t_cnt) in enumerate(zip(bars_train, train_sizes)):
+    total = t_cnt + test_sizes[idx]
+    pct = (t_cnt / total) * 100
+    y_pos = t_cnt / 2.0
+    ax.text(bar.get_x() + bar.get_width()/2.0, y_pos, f"{t_cnt}\n({pct:.0f}%)", 
+            ha='center', va='center', fontsize=9.5, fontweight='bold', color='#ffffff')
 
-for bar in bars_test:
-    yval = bar.get_height()
-    ax.text(bar.get_x() + bar.get_width()/2.0, yval + 30, f"{yval}", ha='center', va='bottom', fontsize=9, fontweight='bold', color='#e8710a')
+# Labels inside Green bar (Test)
+for idx, (bar, te_cnt) in enumerate(zip(bars_test, test_sizes)):
+    t_cnt = train_sizes[idx]
+    total = t_cnt + te_cnt
+    pct = (te_cnt / total) * 100
+    y_pos = t_cnt + (te_cnt / 2.0)
+    ax.text(bar.get_x() + bar.get_width()/2.0, y_pos, f"{te_cnt}\n({pct:.0f}%)", 
+            ha='center', va='center', fontsize=9.5, fontweight='bold', color='#ffffff')
 
-ax.set_title("Local Dataset Partitioning: Train vs Test Records per Client", fontsize=12, fontweight='bold', color=TEXT_COLOR, pad=18)
+ax.set_title("Dataset Records Distribution Across Machines", fontsize=13, fontweight='bold', color=TEXT_COLOR, pad=18)
 ax.set_xlabel("Client Node", fontsize=10, color=TEXT_COLOR, labelpad=10)
-ax.set_ylabel("Record Count", fontsize=10, color=TEXT_COLOR, labelpad=10)
+ax.set_ylabel("Number of Records", fontsize=10, color=TEXT_COLOR, labelpad=10)
 ax.set_xticks(x_indices)
-ax.set_xticklabels(names, fontweight='bold')
-ax.set_ylim(0, max(max(train_sizes), max(test_sizes)) * 1.22)
+ax.set_xticklabels(names, fontsize=10, fontweight='bold')
+
+max_total = max([tr + te for tr, te in zip(train_sizes, test_sizes)])
+ax.set_ylim(0, max_total * 1.15)
 ax.grid(True, linestyle='--', alpha=0.4, axis='y')
-ax.legend(loc='upper right', frameon=True, facecolor=card_bg, edgecolor='#dadce0')
+ax.legend(loc='upper right', frameon=True, facecolor=card_bg, edgecolor='#dadce0', fontsize=9.5)
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_dataset_sizes.png"), dpi=300)
 plt.close()

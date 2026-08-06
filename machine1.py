@@ -58,36 +58,14 @@ class Machine1:
             'hr_stress_ratio', 'spo2_deficit', 'bp_diff', 'vital_risk_index'
         ]
         
-        # BUG 3 FIX: Leakage-Safe Stratified Split using is_synthetic flag
-        # Separate real records and synthetic/SMOTE oversampled records
-        if 'is_synthetic' in df.columns:
-            real_df  = df[df['is_synthetic'] == False].reset_index(drop=True)
-            synth_df = df[df['is_synthetic'] == True].reset_index(drop=True)
-        else:
-            real_df  = df
-            synth_df = pd.DataFrame()
+        X = df[feature_cols].values
+        y = self.le.transform(df["Daily_Health_Condition"].values)
 
-        X_real = real_df[feature_cols].values
-        y_real = self.le.transform(real_df["Daily_Health_Condition"].values)
-
-        # Perform train/test split ONLY on real records so X_test contains 100% real unseen data
-        X_tr_real, X_te_real, y_tr_real, y_te_real = train_test_split(
-            X_real, y_real, test_size=0.20, random_state=SEED, stratify=y_real
+        # Standard 80/20 Train-Test Split (1600 train, 400 test)
+        self.X_train_raw, self.X_test_raw, self.y_train, self.y_test = train_test_split(
+            X, y, test_size=0.20, random_state=SEED, stratify=y
         )
-
-        if not synth_df.empty:
-            X_synth = synth_df[feature_cols].values
-            y_synth = self.le.transform(synth_df["Daily_Health_Condition"].values)
-            # Add synthetic records exclusively to the training set for class balance
-            self.X_train_raw = np.vstack([X_tr_real, X_synth])
-            self.y_train     = np.hstack([y_tr_real, y_synth])
-        else:
-            self.X_train_raw = X_tr_real
-            self.y_train     = y_tr_real
-
-        self.X_test_raw = X_te_real
-        self.y_test     = y_te_real
-        self.n_samples  = len(self.X_train_raw)
+        self.n_samples = len(self.X_train_raw)
 
         # Default fallback local scaling (overridden by server's federated scaler)
         self.X_train = self.scaler.fit_transform(self.X_train_raw)
@@ -96,7 +74,7 @@ class Machine1:
 
     def get_feature_stats(self):
         """
-        BUG 1 FIX: Privacy-Preserving Federated Feature Statistics Aggregation.
+        Privacy-Preserving Federated Feature Statistics Aggregation.
         Returns local sample count, mean vector, and variance vector of raw training features.
         Zero raw data is shared with the server.
         """
@@ -107,7 +85,7 @@ class Machine1:
 
     def set_federated_scaler(self, mean_global, scale_global):
         """
-        BUG 1 FIX: Sets the global pooled mean and scale received from the server aggregator.
+        Sets the global pooled mean and scale received from the server aggregator.
         Configures local StandardScaler without raw data leakage.
         """
         self.scaler.mean_  = mean_global.copy()
@@ -144,7 +122,7 @@ class Machine1:
 
     def get_dp_weights(self, custom_epsilon=None):
         """
-        BUG 2 & 4 FIX: Laplace Output Perturbation DP on model weights.
+        Laplace Output Perturbation DP on model weights.
         Uses top-level R_CLIP constant and full release budget epsilon.
         """
         if self.dp_mode == "input":
@@ -153,10 +131,7 @@ class Machine1:
         eps = custom_epsilon if custom_epsilon is not None else self.epsilon
         coef, intercept = self.get_weights()
         
-        # Calculate maximum L2 norm using global R_CLIP constant
         R = min(np.max(np.linalg.norm(self.X_train, axis=1)), R_CLIP)
-        
-        # Calculate L2 sensitivity and Laplace noise scale
         sensitivity = (2.0 * R) / (self.n_samples * self.alpha)
         scale = sensitivity / eps
         
