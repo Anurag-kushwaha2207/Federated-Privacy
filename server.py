@@ -351,18 +351,35 @@ plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_dp_laplace.png"), dpi=300)
 plt.close()
 
-# Plot 3: Dataset Sizes
-fig, ax = plt.subplots(figsize=(8, 5), facecolor=fig_bg)
+# Plot 3: Dataset Sizes (Train vs Test Breakdown)
+fig, ax = plt.subplots(figsize=(8.5, 5), facecolor=fig_bg)
 ax.set_facecolor(card_bg)
-sizes = [m.get_train_size() for m in clients]
-bars = ax.bar(names, sizes, color=['#1a73e8', '#e8710a', '#1e8e3e'], width=0.5)
-for bar in bars:
+
+train_sizes = [m.get_train_size() for m in clients]
+test_sizes  = [len(m.get_test_data()[1]) for m in clients]
+
+x_indices = np.arange(len(names))
+bar_width = 0.35
+
+bars_train = ax.bar(x_indices - bar_width/2, train_sizes, width=bar_width, label='Train Records', color='#1a73e8', edgecolor='none')
+bars_test  = ax.bar(x_indices + bar_width/2, test_sizes,  width=bar_width, label='Test Records (100% Real)', color='#e8710a', edgecolor='none')
+
+for bar in bars_train:
     yval = bar.get_height()
-    ax.text(bar.get_x() + bar.get_width()/2.0, yval + 20, f"{yval}", ha='center', va='bottom', fontweight='bold')
-ax.set_title("Local Training Dataset Records per Client", fontsize=12, fontweight='bold', pad=15)
-ax.set_ylabel("Record Count", fontsize=10)
-ax.set_ylim(0, max(sizes) * 1.2)
-ax.grid(True, linestyle='--', alpha=0.5, axis='y')
+    ax.text(bar.get_x() + bar.get_width()/2.0, yval + 30, f"{yval}", ha='center', va='bottom', fontsize=9, fontweight='bold', color='#1a73e8')
+
+for bar in bars_test:
+    yval = bar.get_height()
+    ax.text(bar.get_x() + bar.get_width()/2.0, yval + 30, f"{yval}", ha='center', va='bottom', fontsize=9, fontweight='bold', color='#e8710a')
+
+ax.set_title("Local Dataset Partitioning: Train vs Test Records per Client", fontsize=12, fontweight='bold', color=TEXT_COLOR, pad=18)
+ax.set_xlabel("Client Node", fontsize=10, color=TEXT_COLOR, labelpad=10)
+ax.set_ylabel("Record Count", fontsize=10, color=TEXT_COLOR, labelpad=10)
+ax.set_xticks(x_indices)
+ax.set_xticklabels(names, fontweight='bold')
+ax.set_ylim(0, max(max(train_sizes), max(test_sizes)) * 1.22)
+ax.grid(True, linestyle='--', alpha=0.4, axis='y')
+ax.legend(loc='upper right', frameon=True, facecolor=card_bg, edgecolor='#dadce0')
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_dataset_sizes.png"), dpi=300)
 plt.close()
