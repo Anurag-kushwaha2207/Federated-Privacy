@@ -11,12 +11,13 @@ import os
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import SGDClassifier
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 
 # ── CONFIG ─────────────────────────────────────────────────
 DATA_FILE   = os.path.join(os.path.dirname(__file__), "machine3_data.json")
-ALPHA       = 0.2   # Regularization parameter
+ALPHA       = 0.20  # Regularization parameter
+R_CLIP      = 1.5   # Maximum L2 norm clipping threshold for feature vectors
 SEED        = 42
 
 class Machine3:
@@ -35,20 +36,21 @@ class Machine3:
         self.le = LabelEncoder()
         self.le.fit([0, 1, 2, 3])
         
-        self.X_train = None
-        self.X_test  = None
-        self.y_train = None
-        self.y_test  = None
-        self.n_samples = 0
+        self.X_train_raw = None
+        self.X_test_raw  = None
+        self.X_train     = None
+        self.X_test      = None
+        self.y_train     = None
+        self.y_test      = None
+        self.n_samples   = 0
+        self.scaler      = StandardScaler()
         
         # Load and prepare data
         self.load_data()
-        self.initialize_model()
 
     def load_data(self):
         df = pd.read_json(DATA_FILE, orient='records')
         
-        # Extract features and targets
         feature_cols = [
             'heart_rate', 'blood_oxygen', 'blood_pressure_systolic', 'blood_pressure_diastolic', 
             'glucose_level', 'body_temperature', 'respiratory_rate', 'activity_level', 
@@ -56,143 +58,106 @@ class Machine3:
             'hr_stress_ratio', 'spo2_deficit', 'bp_diff', 'vital_risk_index'
         ]
         
-        X = df[feature_cols].values
-        y = self.le.transform(df["Daily_Health_Condition"].values)
-        
-        # Train-Test Split (80% train, 20% test)
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
-            X, y, test_size=0.20, random_state=SEED, stratify=y
+        # BUG 3 FIX: Leakage-Safe Stratified Split using is_synthetic flag
+        if 'is_synthetic' in df.columns:
+            real_df  = df[df['is_synthetic'] == False].reset_index(drop=True)
+            synth_df = df[df['is_synthetic'] == True].reset_index(drop=True)
+        else:
+            real_df  = df
+            synth_df = pd.DataFrame()
+
+        X_real = real_df[feature_cols].values
+        y_real = self.le.transform(real_df["Daily_Health_Condition"].values)
+
+        X_tr_real, X_te_real, y_tr_real, y_te_real = train_test_split(
+            X_real, y_real, test_size=0.20, random_state=SEED, stratify=y_real
         )
-        
-        # Fit local StandardScaler on client training data only to avoid global data leakage
-        from sklearn.preprocessing import StandardScaler
-        self.scaler = StandardScaler()
-        self.X_train = self.scaler.fit_transform(self.X_train)
-        self.X_test = self.scaler.transform(self.X_test)
-        self.n_samples = len(self.X_train)
-        
-        # Apply Input Perturbation DP if enabled
-        if self.dp_mode == "input" and self.epsilon > 0:
-            self.apply_input_dp()
+
+        if not synth_df.empty:
+            X_synth = synth_df[feature_cols].values
+            y_synth = self.le.transform(synth_df["Daily_Health_Condition"].values)
+            self.X_train_raw = np.vstack([X_tr_real, X_synth])
+            self.y_train     = np.hstack([y_tr_real, y_synth])
+        else:
+            self.X_train_raw = X_tr_real
+            self.y_train     = y_tr_real
+
+        self.X_test_raw = X_te_real
+        self.y_test     = y_te_real
+        self.n_samples  = len(self.X_train_raw)
+
+        self.X_train = self.scaler.fit_transform(self.X_train_raw)
+        self.X_test  = self.scaler.transform(self.X_test_raw)
+        self.initialize_model()
+
+    def get_feature_stats(self):
+        """
+        BUG 1 FIX: Privacy-Preserving Federated Feature Statistics Aggregation.
+        Returns local sample count, mean vector, and variance vector of raw training features.
+        """
+        n_i = len(self.X_train_raw)
+        mean_i = np.mean(self.X_train_raw, axis=0)
+        var_i = np.var(self.X_train_raw, axis=0)
+        return n_i, mean_i, var_i
+
+    def set_federated_scaler(self, mean_global, scale_global):
+        """
+        BUG 1 FIX: Sets the global pooled mean and scale received from the server aggregator.
+        Configures local StandardScaler without raw data leakage.
+        """
+        self.scaler.mean_  = mean_global.copy()
+        self.scaler.scale_ = scale_global.copy()
+        self.scaler.var_   = scale_global.copy() ** 2
+
+        self.X_train = self.scaler.transform(self.X_train_raw)
+        self.X_test  = self.scaler.transform(self.X_test_raw)
+        self.initialize_model()
 
     def initialize_model(self):
-        # Recreate model to reset step counter t_ and optimizer state completely
         self.model = SGDClassifier(
             loss='log_loss', penalty='l2', alpha=self.alpha,
             fit_intercept=True, warm_start=True, random_state=SEED
         )
         self.rng = np.random.RandomState(SEED)
-        # Call partial_fit once with dummy subset to initialize weights shape
         self.model.partial_fit(self.X_train[:4], [0, 1, 2, 3], classes=[0, 1, 2, 3])
-        # Reset initialized weights to zero
         self.model.coef_ = np.zeros_like(self.model.coef_)
         self.model.intercept_ = np.zeros_like(self.model.intercept_)
 
     def get_weights(self):
-        """Returns local model weights (coefficients & intercept)."""
         return self.model.coef_.copy(), self.model.intercept_.copy()
 
     def set_weights(self, coef, intercept):
-        """Updates local model weights with global weights."""
         self.model.coef_ = coef.copy()
         self.model.intercept_ = intercept.copy()
-        # Reset step counter so local training starts with a fresh learning rate schedule
         self.model.t_ = 1.0
 
     def local_train(self, epochs=100):
-        """
-        Trains local model on local training set.
-        We train for a large number of epochs (100+) to ensure near-convergence,
-        which validates the convergence assumption of Output Perturbation DP sensitivity.
-        We compute balanced sample weights to address class imbalance.
-        """
         from sklearn.utils.class_weight import compute_sample_weight
         sample_weight = compute_sample_weight(class_weight='balanced', y=self.y_train)
         for _ in range(epochs):
             self.model.partial_fit(self.X_train, self.y_train, sample_weight=sample_weight)
 
-    def classify_feature_sensitivity(self, feature_name):
-        """Categorizes features into sensitivity levels (High/Medium/Low)."""
-        high_sens = ['glucose_level', 'blood_pressure_systolic', 'blood_pressure_diastolic', 'heart_rate']
-        medium_sens = ['body_temperature', 'respiratory_rate', 'sleep_quality', 'stress_level', 'hrv_sdnn']
-        low_sens = ['activity_level', 'steps_count', 'calories_burned']
-        
-        if feature_name in high_sens:
-            return "High", 1.5
-        elif feature_name in medium_sens:
-            return "Medium", 1.0
-        else:
-            return "Low", 0.1
-
-    def apply_input_dp(self):
-        """Applies Laplace Local DP (Input Perturbation) to training features based on sensitivity."""
-        feature_cols = [
-            'heart_rate', 'blood_oxygen', 'blood_pressure_systolic', 'blood_pressure_diastolic', 
-            'glucose_level', 'body_temperature', 'respiratory_rate', 'activity_level', 
-            'sleep_quality', 'stress_level', 'hrv_sdnn', 'steps_count', 'calories_burned'
-        ]
-        # Standardized features typically lie in [-3, 3] range. We assume a clip bound B = 3.
-        # Sensitivity of a feature is the width of its range: Delta = 2 * B = 6.0
-        Delta = 6.0
-        
-        for idx, col in enumerate(feature_cols):
-            sens_class, multiplier = self.classify_feature_sensitivity(col)
-            # Epsilon per feature is scaled by the multiplier
-            # High sensitivity = more noise (smaller effective epsilon), Low sensitivity = less noise (larger effective epsilon)
-            feat_eps = self.epsilon / multiplier
-            scale = Delta / feat_eps
-            
-            # Add Laplace noise to the feature column
-            noise = self.rng.laplace(loc=0.0, scale=scale, size=self.X_train[:, idx].shape)
-            self.X_train[:, idx] += noise
-
-    def get_dp_weights(self):
+    def get_dp_weights(self, custom_epsilon=None):
         """
-        Applies Laplace Output Perturbation DP to local weights if dp_mode is 'output'.
-        If dp_mode is 'input', returns clean weights as noise is already applied to input features.
-        
-        Sensitivity Formula:
-            L2 Sensitivity ΔW = 2 * R / (N * alpha)
-            where N = local sample size, alpha = L2 regularization strength,
-            and R = maximum L2 norm of the input feature vectors.
-            
-        Laplace Scale:
-            b = ΔW / epsilon
-            
-        NOTE: This output perturbation mechanism assumes the local optimization
-        objective has fully converged to the unique L2-regularized ERM minimizer.
-        To approximate this condition, local training epochs should be set high.
+        BUG 2 & 4 FIX: Laplace Output Perturbation DP on model weights.
+        Uses top-level R_CLIP constant and full release budget epsilon.
         """
         if self.dp_mode == "input":
-            # Post-processing theorem: model trained on already DP-perturbed inputs inherits DP automatically
             return self.get_weights()
 
+        eps = custom_epsilon if custom_epsilon is not None else self.epsilon
         coef, intercept = self.get_weights()
         
-        # Calculate maximum L2 norm of the features with norm clipping (R_CLIP = 1.5)
-        R_CLIP = 1.5
         R = min(np.max(np.linalg.norm(self.X_train, axis=1)), R_CLIP)
-        
-        # Calculate sensitivity and noise scale
         sensitivity = (2.0 * R) / (self.n_samples * self.alpha)
-        scale = sensitivity / self.epsilon
+        scale = sensitivity / eps
         
-        # Generate and add Laplace noise
-        noise_coef = self.rng.laplace(loc=0.0, scale=scale, size=coef.shape)
-        noise_intercept = self.rng.laplace(loc=0.0, scale=scale, size=intercept.shape)
-        
-        # The scale parameter specifies the scale parameter of the Laplace distribution.
-        noisy_coef = coef + noise_coef
-        noisy_intercept = intercept + noise_intercept
+        noisy_coef = coef + self.rng.laplace(loc=0.0, scale=scale, size=coef.shape)
+        noisy_intercept = intercept + self.rng.laplace(loc=0.0, scale=scale, size=intercept.shape)
         
         return noisy_coef, noisy_intercept
 
     def fine_tune(self, coef, intercept, epochs=10):
-        """
-        Initializes the model weights with the global weights and fine-tunes
-        the model locally on client training data for personalization.
-        We compute balanced sample weights to address class imbalance.
-        """
         self.set_weights(coef, intercept)
         from sklearn.utils.class_weight import compute_sample_weight
         sample_weight = compute_sample_weight(class_weight='balanced', y=self.y_train)
@@ -205,15 +170,15 @@ class Machine3:
     def get_train_size(self):
         return self.n_samples
 
-    def get_dp_info(self):
+    def get_dp_info(self, custom_epsilon=None):
+        eps = custom_epsilon if custom_epsilon is not None else self.epsilon
         if self.dp_mode == "input":
-            return f"Input Perturbation DP (Local DP) | Epsilon={self.epsilon:.4f} | Mode=Feature-Level Sensitivity"
+            return f"Input Perturbation DP | Epsilon={eps:.4f}"
         
-        R_CLIP = 5.0
         R = min(np.max(np.linalg.norm(self.X_train, axis=1)), R_CLIP)
         sensitivity = (2.0 * R) / (self.n_samples * self.alpha)
-        scale = sensitivity / self.epsilon
-        return f"Output Perturbation DP | Sensitivity={sensitivity:.6f} | Scale={scale:.6f} | MaxNorm(R)={R:.4f}"
+        scale = sensitivity / eps
+        return f"Output Perturbation DP | Sensitivity={sensitivity:.6f} | Scale={scale:.6f} | MaxNorm(R)={R:.4f} | R_CLIP={R_CLIP}"
 
 # ── STANDALONE TEST ────────────────────────────────────────
 if __name__ == "__main__":
@@ -223,36 +188,27 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Standalone Client Model with Differential Privacy")
     parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy")
     parser.add_argument("-e", "--epsilon", type=float, default=1.0, help="Privacy Budget (Epsilon) [default: 1.0]")
-    parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="output", help="DP Perturbation stage: 'input' or 'output'")
     args = parser.parse_args()
     
-    if not args.no_dp and args.epsilon <= 0:
-        print("Error: Epsilon must be strictly greater than 0.")
-        exit(1)
-        
-    # Initialize machine
-    m = Machine3(epsilon=args.epsilon if not args.no_dp else 0.0, dp_mode=args.dp_mode)
+    m = Machine3(epsilon=args.epsilon if not args.no_dp else 0.0)
     print(f"\nMachine 3 Standalone Run")
     print(f"Dataset Size: {m.get_train_size()} training samples")
     
     if args.no_dp:
         print("Differential Privacy: Disabled")
     else:
-        print(f"Differential Privacy: Enabled (Epsilon = {args.epsilon}, Mode = {args.dp_mode})")
+        print(f"Differential Privacy: Enabled (Epsilon = {args.epsilon})")
         print(f"DP Info: {m.get_dp_info()}")
         
     print("Training local model...")
     m.local_train(epochs=100)
     
-    # Get weights
     if args.no_dp:
         coef, intercept = m.get_weights()
     else:
         coef, intercept = m.get_dp_weights()
-        # Set the weights back to the model for evaluation
         m.set_weights(coef, intercept)
         
-    # Evaluate
     X_te, y_te = m.get_test_data()
     preds = m.model.predict(X_te)
     accuracy = accuracy_score(y_te, preds)

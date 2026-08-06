@@ -24,17 +24,9 @@ feature_cols = [
 
 df = df.dropna(subset=feature_cols + ['health_event']).reset_index(drop=True)
 
-X = df[feature_cols].copy()
-y = df['health_event'].astype(int).copy()
-
-# Fit global StandardScaler so all client partitions share identical, aligned feature scales
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-
-# Build a clean DataFrame with scaled features
-clean_df = pd.DataFrame(X_scaled, columns=feature_cols)
-clean_df['Daily_Health_Condition'] = y  # Keep target name consistent for clients
+# Keep RAW features + targets + is_synthetic flag WITHOUT global data-leakage scaling
+clean_df = df[feature_cols + ['is_synthetic']].copy()
+clean_df['Daily_Health_Condition'] = df['health_event'].astype(int)
 
 def partition_data_non_iid_equal_sizes(df, n_clients=3, alpha=0.5, random_seed=42):
     """
