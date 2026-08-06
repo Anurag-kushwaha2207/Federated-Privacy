@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 
 # ── CONFIG ─────────────────────────────────────────────────
 DATA_FILE   = os.path.join(os.path.dirname(__file__), "machine3_data.json")
-ALPHA       = 0.05  # Regularization parameter
+ALPHA       = 0.2   # Regularization parameter
 SEED        = 42
 
 class Machine3:
@@ -52,7 +52,8 @@ class Machine3:
         feature_cols = [
             'heart_rate', 'blood_oxygen', 'blood_pressure_systolic', 'blood_pressure_diastolic', 
             'glucose_level', 'body_temperature', 'respiratory_rate', 'activity_level', 
-            'sleep_quality', 'stress_level', 'hrv_sdnn', 'steps_count', 'calories_burned'
+            'sleep_quality', 'stress_level', 'hrv_sdnn', 'steps_count', 'calories_burned',
+            'hr_stress_ratio', 'spo2_deficit', 'bp_diff', 'vital_risk_index'
         ]
         
         X = df[feature_cols].values
@@ -168,8 +169,8 @@ class Machine3:
 
         coef, intercept = self.get_weights()
         
-        # Calculate maximum L2 norm of the features with norm clipping (R_CLIP = 2.5)
-        R_CLIP = 2.5
+        # Calculate maximum L2 norm of the features with norm clipping (R_CLIP = 1.5)
+        R_CLIP = 1.5
         R = min(np.max(np.linalg.norm(self.X_train, axis=1)), R_CLIP)
         
         # Calculate sensitivity and noise scale

@@ -162,7 +162,7 @@ for r in range(1, ROUNDS + 1):
                     print(f"    - {names[idx]}: (Input DP Enabled, Epsilon = {global_epsilon:.4f}, Features Perturbed locally)")
                 else:
                     # Calculate maximum L2 norm of the features for printing
-                    R_CLIP = 2.5
+                    R_CLIP = 1.5
                     R = min(np.max(np.linalg.norm(m.X_train, axis=1)), R_CLIP)
                     sensitivity = (2.0 * R) / (m.get_train_size() * m.alpha)
                     scale = sensitivity / epsilon_per_round

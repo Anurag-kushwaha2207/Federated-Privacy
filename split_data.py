@@ -6,14 +6,20 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 excel_path = os.path.join(base_dir, "health_data_balanced_after_overfitting.xlsx")
 
 print("Loading dataset from Excel path...")
-# Load the dataset from the specified sheet in the Excel file
 df = pd.read_excel(excel_path, sheet_name="Balanced_Data")
+
+# Feature Engineering: Add non-linear vital anomaly interaction features
+df['hr_stress_ratio'] = df['heart_rate'] * df['stress_level']
+df['spo2_deficit'] = 100.0 - df['blood_oxygen']
+df['bp_diff'] = df['blood_pressure_systolic'] - df['blood_pressure_diastolic']
+df['vital_risk_index'] = (df['heart_rate'] / 70.0) + (df['spo2_deficit'] / 5.0) + (df['stress_level'] * 2.0)
 
 # Features we want to keep
 feature_cols = [
     'heart_rate', 'blood_oxygen', 'blood_pressure_systolic', 'blood_pressure_diastolic', 
     'glucose_level', 'body_temperature', 'respiratory_rate', 'activity_level', 
-    'sleep_quality', 'stress_level', 'hrv_sdnn', 'steps_count', 'calories_burned'
+    'sleep_quality', 'stress_level', 'hrv_sdnn', 'steps_count', 'calories_burned',
+    'hr_stress_ratio', 'spo2_deficit', 'bp_diff', 'vital_risk_index'
 ]
 
 df = df.dropna(subset=feature_cols + ['health_event']).reset_index(drop=True)
