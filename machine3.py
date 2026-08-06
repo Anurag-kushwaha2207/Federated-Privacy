@@ -58,14 +58,36 @@ class Machine3:
             'hr_stress_ratio', 'spo2_deficit', 'bp_diff', 'vital_risk_index'
         ]
         
-        X = df[feature_cols].values
-        y = self.le.transform(df["Daily_Health_Condition"].values)
+        # BUG FIX: Synthetic-Aware Leakage-Safe Data Split
+        # 1. Separate real records (is_synthetic == False) and synthetic records (is_synthetic == True)
+        if 'is_synthetic' in df.columns:
+            real_df  = df[df['is_synthetic'] == False].reset_index(drop=True)
+            synth_df = df[df['is_synthetic'] == True].reset_index(drop=True)
+        else:
+            real_df  = df
+            synth_df = pd.DataFrame()
 
-        # Standard 80/20 Train-Test Split (1600 train, 400 test)
-        self.X_train_raw, self.X_test_raw, self.y_train, self.y_test = train_test_split(
-            X, y, test_size=0.20, random_state=SEED, stratify=y
+        X_real = real_df[feature_cols].values
+        y_real = self.le.transform(real_df["Daily_Health_Condition"].values)
+
+        # 2. Perform train/test split ONLY on real records so X_test contains 100% real unseen data
+        X_tr_real, X_te_real, y_tr_real, y_te_real = train_test_split(
+            X_real, y_real, test_size=0.20, random_state=SEED, stratify=y_real
         )
-        self.n_samples = len(self.X_train_raw)
+
+        # 3. Concatenate synthetic/SMOTE oversampled records EXCLUSIVELY into local training set for class balance
+        if not synth_df.empty:
+            X_synth = synth_df[feature_cols].values
+            y_synth = self.le.transform(synth_df["Daily_Health_Condition"].values)
+            self.X_train_raw = np.vstack([X_tr_real, X_synth])
+            self.y_train     = np.hstack([y_tr_real, y_synth])
+        else:
+            self.X_train_raw = X_tr_real
+            self.y_train     = y_tr_real
+
+        self.X_test_raw = X_te_real
+        self.y_test     = y_te_real
+        self.n_samples  = len(self.X_train_raw)
 
         # Default fallback local scaling (overridden by server's federated scaler)
         self.X_train = self.scaler.fit_transform(self.X_train_raw)
