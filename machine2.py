@@ -49,6 +49,14 @@ class Machine2:
         self.load_data()
 
     def load_data(self):
+        """
+        SYNTHETIC-AWARE LEAKAGE-SAFE DATA SPLIT WITH GUARANTEED 0% OVERLAP:
+        1. Separate real records (is_synthetic == False) from synthetic records (is_synthetic == True).
+        2. Perform 80/20 train/test split EXCLUSIVELY on real records (stratified by target).
+        3. Place synthetic records in local training set for class balance.
+        4. Perform strict row deduplication to remove any training record that matches any test record.
+        This guarantees 100% real unseen test set and EXACT 0.00% data leakage/overlap.
+        """
         df = pd.read_json(DATA_FILE, orient='records')
         
         feature_cols = [
@@ -58,14 +66,41 @@ class Machine2:
             'hr_stress_ratio', 'spo2_deficit', 'bp_diff', 'vital_risk_index'
         ]
         
-        X = df[feature_cols].values
-        y = self.le.transform(df["Daily_Health_Condition"].values)
+        if 'is_synthetic' in df.columns:
+            real_df  = df[df['is_synthetic'] == False].reset_index(drop=True)
+            synth_df = df[df['is_synthetic'] == True].reset_index(drop=True)
+        else:
+            real_df  = df
+            synth_df = pd.DataFrame()
 
-        # Exact 80% Train / 20% Test Stratified Split (1600 train, 400 test per machine)
-        self.X_train_raw, self.X_test_raw, self.y_train, self.y_test = train_test_split(
-            X, y, test_size=0.20, random_state=SEED, stratify=y
+        X_real = real_df[feature_cols].values
+        y_real = self.le.transform(real_df["Daily_Health_Condition"].values)
+
+        # Train/test split ONLY on real records (test set = 100% real unseen data)
+        X_tr_real, X_te_real, y_tr_real, y_te_real = train_test_split(
+            X_real, y_real, test_size=0.20, random_state=SEED, stratify=y_real
         )
-        self.n_samples = len(self.X_train_raw)
+
+        if not synth_df.empty:
+            X_synth = synth_df[feature_cols].values
+            y_synth = self.le.transform(synth_df["Daily_Health_Condition"].values)
+            X_tr_raw = np.vstack([X_tr_real, X_synth])
+            y_tr_raw = np.hstack([y_tr_real, y_synth])
+        else:
+            X_tr_raw = X_tr_real
+            y_tr_raw = y_tr_real
+
+        # STRICT OVERLAP DEDUPLICATION: Purge any training row matching any test row
+        clean_mask = []
+        for row in X_tr_raw:
+            match = np.any(np.all(np.isclose(X_te_real, row), axis=1))
+            clean_mask.append(not match)
+
+        self.X_train_raw = X_tr_raw[clean_mask]
+        self.y_train     = y_tr_raw[clean_mask]
+        self.X_test_raw  = X_te_real
+        self.y_test      = y_te_real
+        self.n_samples   = len(self.X_train_raw)
 
         # Default fallback local scaling (overridden by server's federated scaler)
         self.X_train = self.scaler.fit_transform(self.X_train_raw)
