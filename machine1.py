@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 
 # ── CONFIG ─────────────────────────────────────────────────
 DATA_FILE   = os.path.join(os.path.dirname(__file__), "machine1_data.json")
-ALPHA       = 0.1   # Regularization parameter
+ALPHA       = 0.05  # Regularization parameter
 SEED        = 42
 
 class Machine1:
@@ -168,8 +168,8 @@ class Machine1:
 
         coef, intercept = self.get_weights()
         
-        # Calculate maximum L2 norm of the features with norm clipping (R_CLIP = 5.0)
-        R_CLIP = 5.0
+        # Calculate maximum L2 norm of the features with norm clipping (R_CLIP = 2.5)
+        R_CLIP = 2.5
         R = min(np.max(np.linalg.norm(self.X_train, axis=1)), R_CLIP)
         
         # Calculate sensitivity and noise scale

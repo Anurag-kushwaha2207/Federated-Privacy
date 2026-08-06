@@ -21,8 +21,13 @@ df = df.dropna(subset=feature_cols + ['health_event']).reset_index(drop=True)
 X = df[feature_cols].copy()
 y = df['health_event'].astype(int).copy()
 
-# Build a clean DataFrame with raw features (removed global StandardScaler to prevent data leakage)
-clean_df = pd.DataFrame(X, columns=feature_cols)
+# Fit global StandardScaler so all client partitions share identical, aligned feature scales
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Build a clean DataFrame with scaled features
+clean_df = pd.DataFrame(X_scaled, columns=feature_cols)
 clean_df['Daily_Health_Condition'] = y  # Keep target name consistent for clients
 
 def partition_data_non_iid_equal_sizes(df, n_clients=3, alpha=0.5, random_seed=42):

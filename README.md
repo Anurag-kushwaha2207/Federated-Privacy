@@ -11,12 +11,12 @@ Privacy is guaranteed using **Laplace Output Differential Privacy (DP)** with fe
 The system operates across decentralized client nodes (Machine 1, Machine 2, Machine 3) with central weight aggregation via Federated Averaging (**FedAvg**).
 
 ### 1. Feature Norm Clipping
-To bound the maximum impact of any single data point (sensitivity), feature vectors $x_i$ are constrained by an $L_2$ threshold $R_{\text{clip}} = 5.0$:
+To bound the maximum impact of any single data point (sensitivity), feature vectors $x_i$ are constrained by an $L_2$ threshold $R_{\text{clip}} = 2.5$:
 
 $$R = \min\left(\max_{i} \|x_i\|_2, R_{\text{clip}}\right)$$
 
 ### 2. Sensitivity Calculation ($\Delta W$)
-For an $L_2$-regularized convex loss with regularization parameter $\alpha = 0.1$ trained on $N$ local samples:
+For an $L_2$-regularized convex loss with regularization parameter $\alpha = 0.05$ trained on $N$ local samples:
 
 $$\Delta W = \frac{2 \cdot R}{N \cdot \alpha}$$
 
@@ -44,21 +44,21 @@ The system was evaluated on a clean dataset of 6,000 records (`health_data_balan
 
 | Command | Privacy Configuration | Global Accuracy | Average Personalized Accuracy |
 |:---|:---|:---:|:---:|
-| `python server.py` | Differential Privacy Enabled ($\epsilon = 1.0$, Default) | **84.08%** | **97.83%** |
-| `python server.py --no-dp` | Non-Private Baseline | **96.42%** | **97.92%** |
-| `python server.py -e 1.0 --dp-clients 1` | Heterogeneous DP (Client 1 Active) | **94.92%** | **97.92%** |
-| `python server.py -e 1.0 --dp-clients 1,2` | Heterogeneous DP (Clients 1 & 2 Active) | **90.75%** | **97.75%** |
+| `python server.py` | Differential Privacy Enabled ($\epsilon = 1.0$, Default) | **89.25%** | **98.17%** |
+| `python server.py --no-dp` | Non-Private Baseline | **96.58%** | **98.17%** |
+| `python server.py -e 1.0 --dp-clients 1` | Heterogeneous DP (Client 1 Active) | **96.17%** | **98.17%** |
+| `python server.py -e 1.0 --dp-clients 1,2` | Heterogeneous DP (Clients 1 & 2 Active) | **93.08%** | **98.17%** |
 
 ### 2. Standalone Client Benchmarks (Local Training Only)
 
 | Command | Client | Differential Privacy | Test Accuracy |
 |:---|:---|:---:|:---:|
-| `python machine.py --no-dp` | Machine 1 | Disabled | **98.25%** |
-| `python machine.py --no-dp` | Machine 2 | Disabled | **97.25%** |
-| `python machine.py --no-dp` | Machine 3 | Disabled | **97.00%** |
+| `python machine.py --no-dp` | Machine 1 | Disabled | **98.75%** |
+| `python machine.py --no-dp` | Machine 2 | Disabled | **97.75%** |
+| `python machine.py --no-dp` | Machine 3 | Disabled | **97.50%** |
 | `python machine.py` | Machine 1 | Enabled ($\epsilon = 1.0$) | **98.75%** |
-| `python machine.py` | Machine 2 | Enabled ($\epsilon = 1.0$) | **97.25%** |
-| `python machine.py` | Machine 3 | Enabled ($\epsilon = 1.0$) | **96.75%** |
+| `python machine.py` | Machine 2 | Enabled ($\epsilon = 1.0$) | **97.75%** |
+| `python machine.py` | Machine 3 | Enabled ($\epsilon = 1.0$) | **97.50%** |
 
 ### 3. Comparison at Budget $\epsilon = 0.5$
 
