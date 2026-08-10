@@ -1,18 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-============================================================
-  SERVER — Federated Learning + Differential Privacy
-  Central Aggregator
-============================================================
-  This file connects Machine 1, 2, and 3 to run a multi-round
-  Horizontal Federated Learning loop using FedAvg.
-  
-  Integrates:
-  1. Federated Feature Statistics Aggregation (Zero Data Leakage)
-  2. Single-Release Output Differential Privacy (Applied at Final Round)
-  3. Stratified Leakage-Safe Test Splits (100% Real Test Records)
-  4. Unified R_CLIP = 1.5 module-level constant
-============================================================
+Federated Learning Aggregator with Differential Privacy
+
+Coordinates multi-round Federated Averaging (FedAvg) across 3 client machines.
+Integrates global feature scaling, Laplace output perturbation for DP,
+and global model evaluation.
 """
 
 import sys
@@ -31,7 +23,7 @@ np.random.seed(42)
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 warnings.filterwarnings('ignore')
 
-# ── IMPORT CLIENTS ─────────────────────────────────────────
+# Import client models
 from machine1 import Machine1, ALPHA, R_CLIP
 from machine2 import Machine2
 from machine3 import Machine3
@@ -43,21 +35,21 @@ print("Federated Learning & Differential Privacy Aggregator")
 print("Clients: Machine 1, Machine 2, Machine 3")
 print("================================================================")
 
-# ── Ask User for Epsilon (ε) or parse arguments ──
+# Command line arguments
 import argparse
 
 parser = argparse.ArgumentParser(description="Federated Learning + Differential Privacy Server")
 parser.add_argument("--no-dp", action="store_true", help="Run without Differential Privacy (no noise added)")
-parser.add_argument("-e", "--epsilon", type=float, default=None, help="Privacy Budget (Epsilon / ε) to use directly without prompting")
+parser.add_argument("-e", "--epsilon", type=float, default=None, help="Privacy Budget (Epsilon) to use directly without prompting")
 parser.add_argument("--dp-clients", type=str, default="1,2,3", help="Comma-separated list of machine numbers to apply DP (e.g. 1 or 1,2)")
 parser.add_argument("--dp-mode", type=str, choices=["input", "output"], default="output", help="DP Perturbation stage: 'input' (raw features) or 'output' (model weights)")
-parser.add_argument("--verbose", action="store_true", help="Print sample risk alerts and ASCII confusion matrix in terminal")
+parser.add_argument("--verbose", action="store_true", help="Print sample risk alerts and confusion matrix in terminal")
 args, unknown = parser.parse_known_args()
 
 use_dp = not args.no_dp
 
 if not use_dp:
-    global_epsilon = 1.0  # default value for machine initialization
+    global_epsilon = 1.0  # Default value for machine initialization
     print("\nConfiguration:")
     print("  Differential Privacy: Disabled")
     print(f"  Regularization      : L2 (alpha = {ALPHA})")
@@ -68,7 +60,7 @@ else:
         global_epsilon = args.epsilon
     else:
         try:
-            user_eps = input("Enter Privacy Budget (Epsilon / epsilon) [default: 1.0]: ").strip()
+            user_eps = input("Enter Privacy Budget (Epsilon) [default: 1.0]: ").strip()
             global_epsilon = float(user_eps) if user_eps else 1.0
         except Exception:
             global_epsilon = 1.0
@@ -101,8 +93,8 @@ m3 = Machine3(epsilon=global_epsilon if 3 in dp_enabled_clients else 0.0, dp_mod
 clients = [m1, m2, m3]
 names = ["Machine 1", "Machine 2", "Machine 3"]
 
-# ── BUG 1 FIX: Privacy-Preserving Federated Feature Statistics Aggregation ──
-print("Executing Federated Feature Statistics Aggregation (Zero Data Leakage)...")
+# Compute pooled global feature statistics for federated scaling
+print("Executing Federated Feature Statistics Aggregation...")
 stats = [m.get_feature_stats() for m in clients]
 total_N = sum(s[0] for s in stats)
 
@@ -119,13 +111,13 @@ for n_i, mean_i, var_i in stats:
 var_fed /= total_N
 scale_fed = np.sqrt(var_fed)
 
-# Broadcast federated scaler parameters to all edge client nodes
+# Broadcast scaler parameters to clients
 for m in clients:
     m.set_federated_scaler(mu_fed, scale_fed)
 
 print("Federated scaling initialized cleanly across all client nodes.\n")
 
-# ── STEP 2: Compute Baseline (Standalone Local Models) ──
+# Step 1: Baseline evaluation (standalone local models)
 print("Evaluating standalone local models (baselines)...")
 print("-" * 64)
 
@@ -140,7 +132,7 @@ for idx, m in enumerate(clients):
     local_accuracies.append(acc)
     print(f"  {names[idx]} train size: {m.get_train_size()} | Accuracy: {acc*100:.2f}%")
 
-# ── STEP 3: Multi-Round Federated Learning Loop ──
+# Step 2: Multi-round Federated Learning loop (FedAvg)
 print("\nStarting Federated Learning training loops (FedAvg)...")
 print("-" * 64)
 
@@ -165,7 +157,7 @@ for r in range(1, ROUNDS + 1):
         m.local_train(epochs=5)
         
         client_num = idx + 1
-        # BUG 4 FIX: Single-Release Output DP applied exclusively on final round
+        # Apply DP perturbation on model weights during the final round
         if use_dp and client_num in dp_enabled_clients and is_final_round:
             noisy_coef, noisy_intercept = m.get_dp_weights(global_epsilon)
             if args.dp_mode == "input":
@@ -186,7 +178,7 @@ for r in range(1, ROUNDS + 1):
         local_weights.append((noisy_coef, noisy_intercept))
         dataset_sizes.append(m.get_train_size())
             
-    # Aggregation (FedAvg)
+    # Federated Averaging (FedAvg) aggregation weighted by sample counts
     total_samples = sum(dataset_sizes)
     new_global_coef = np.zeros_like(global_coef)
     new_global_intercept = np.zeros_like(global_intercept)
@@ -200,7 +192,7 @@ for r in range(1, ROUNDS + 1):
     global_coef = new_global_coef
     global_intercept = new_global_intercept
     
-    # Evaluate global model
+    # Evaluate aggregated global model
     all_y_true = []
     all_y_pred = []
     
@@ -215,7 +207,7 @@ for r in range(1, ROUNDS + 1):
     history_acc.append(round_acc)
     print(f"    Global aggregated model accuracy: {round_acc*100:.2f}%")
 
-# ── STEP 4: Final Summary ──
+# Step 3: Print final summary
 print("\n=================== FINAL SUMMARY ===================")
 if use_dp:
     print(f"  Differential Privacy Status : ENABLED ({args.dp_mode.upper()} PERTURBATION)")
@@ -231,7 +223,7 @@ print("  " + "-" * 49)
 print(f"  {'FedAvg Global':<18} {sum(m.get_train_size() for m in clients):>15} {history_acc[-1]*100:>11.2f}%")
 print("  " + "-" * 49)
 
-# ── STEP 5: Model Personalization ──
+# Step 4: Fine-tune local models (Personalization)
 print("\n=================== MODEL PERSONALIZATION ===================")
 print("Each client receives the global model and fine-tunes on local data...")
 print("-" * 61)
@@ -252,7 +244,7 @@ for idx, m in enumerate(clients):
 avg_pers_acc = np.mean(personalized_accuracies)
 print(f"  Average Personalized Accuracy: {avg_pers_acc*100:.2f}%\n")
 
-# ── STEP 6: Confusion Matrix & Optional Sample Risk Mappings ──
+# Step 5: Confusion Matrix & Optional Sample Risk Mappings
 cm = confusion_matrix(all_y_true, all_y_pred)
 labels = ["Normal", "Mild Event", "Moderate Event", "Severe Event"]
 
@@ -289,14 +281,14 @@ if args.verbose:
             row_str += f"{val:<10}"
         print(row_str)
 
-# ── STEP 7: Plots & Visualizations ──
+# Step 6: Generate plots and visualizations
 print("\nGenerating final training and accuracy plots...")
 plt.style.use('default')
 fig_bg = '#ffffff'
 card_bg = '#ffffff'
 TEXT_COLOR = '#202124'
 
-# Plot 1: Accuracy Curve with Baseline, Shaded Region, Callouts, and Gap Arrow (Matching Screenshot 1)
+# Plot 1: Federated Accuracy Curve over Rounds
 fig, ax = plt.subplots(figsize=(8.5, 6), facecolor=fig_bg)
 ax.set_facecolor(card_bg)
 
@@ -313,15 +305,15 @@ ax.plot(rounds_x, history_acc_pct, color='#1a73e8', linewidth=3.0, marker='o',
         markersize=9, markerfacecolor='#ffffff', markeredgecolor='#1a73e8', markeredgewidth=2.5,
         label='FedAvg Global Model Accuracy (Federated Learning)')
 
-# Shaded background region between FedAvg curve and baseline
+# Shaded region between FedAvg curve and baseline
 ax.fill_between(rounds_x, history_acc_pct, baseline_acc_pct, color='#e8f0fe', alpha=0.6)
 
 # Callout boxes on each round node
 for idx, (rx, acc) in enumerate(zip(rounds_x, history_acc_pct)):
     ax.annotate(f"{acc:.2f}%", (rx, acc),
-                xytext=(0, 10 if idx % 2 == 0 else -18), textcoords='offset points',
-                ha='center', fontsize=9, fontweight='bold', color='#202124',
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='#ffffff', edgecolor='#dadce0', alpha=0.9))
+                xytext=(0, 14 if idx % 2 == 0 else -22), textcoords='offset points',
+                ha='center', fontsize=11.5, fontweight='bold', color='#202124',
+                bbox=dict(boxstyle='round,pad=0.35', facecolor='#ffffff', edgecolor='#dadce0', alpha=0.9))
 
 # Gap annotation arrow on final round
 final_acc = history_acc_pct[-1]
@@ -351,8 +343,8 @@ plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_accuracy.png"), dpi=300)
 plt.close()
 
-# Plot 2: DP Laplace Distribution (Research Paper Vertical Column Aspect Ratio)
-fig, ax = plt.subplots(figsize=(5.5, 6.2), facecolor=fig_bg)
+# Plot 2: DP Laplace Distribution
+fig, ax = plt.subplots(figsize=(5.5, 6.4), facecolor=fig_bg)
 ax.set_facecolor(card_bg)
 from scipy.stats import laplace as laplace_dist
 if use_dp and args.dp_mode == "output":
@@ -366,34 +358,40 @@ if use_dp and args.dp_mode == "output":
     x_limit = max(3.0 * max_scale, 0.5)
     x_range = np.linspace(-x_limit, x_limit, 1000)
 
-    colors = ['#1a73e8', '#e8710a', '#1e8e3e']
-    line_styles = ['-', '--', ':']
-    line_widths = [3.5, 2.3, 1.6]
+    colors = ['#1a73e8', '#d93025', '#1e8e3e']
+    line_styles = ['-', '--', '-.']
+    line_widths = [2.8, 2.8, 2.8]
 
     for idx, scale in enumerate(scales):
         pdf = laplace_dist.pdf(x_range, loc=0, scale=scale)
-        ax.plot(x_range, pdf, color=colors[idx], linestyle=line_styles[idx], linewidth=line_widths[idx], label=f"{names[idx]} (Scale b = {scale:.6f})")
-        ax.fill_between(x_range, pdf, alpha=0.04, color=colors[idx])
+        ax.plot(x_range, pdf, color=colors[idx], linestyle=line_styles[idx], linewidth=line_widths[idx], 
+                label=f"{names[idx]} (Scale b = {scale:.6f})")
+        ax.fill_between(x_range, pdf, alpha=0.03, color=colors[idx])
 
     max_peak = max([laplace_dist.pdf(0, loc=0, scale=s) for s in scales])
-    ax.set_title("PDF of Laplace DP Noise\n(Single-Release Model Weights)", fontsize=11, fontweight='bold', color=TEXT_COLOR, pad=12)
-    ax.set_xlabel("Noise Value Added to Model Weights", fontsize=10, color=TEXT_COLOR, labelpad=10)
+    ax.set_title("PDF of Laplace DP Noise\n(Single-Release Model Weights)", fontsize=9.5, fontweight='bold', color=TEXT_COLOR, pad=12,
+                 bbox=dict(boxstyle='round,pad=0.4', facecolor='#ffffff', edgecolor='#dadce0', linewidth=1.2))
+    ax.set_xlabel("Noise Value Added to Model Weights", fontsize=11, fontweight='bold', color=TEXT_COLOR, labelpad=10)
+    ax.set_ylabel("Probability Density", fontsize=11, fontweight='bold', color=TEXT_COLOR, labelpad=10)
     ax.set_xlim(-x_limit, x_limit)
-    ax.set_ylim(-0.02 * max_peak, max_peak * 1.18)
+    ax.set_ylim(-0.02 * max_peak, max_peak * 1.25)
+    ax.tick_params(axis='both', labelsize=11)
 else:
     x_range = np.linspace(-1.0, 1.0, 1000)
     pdf = laplace_dist.pdf(x_range, loc=0, scale=0.05)
-    ax.plot(x_range, pdf, color='#1a73e8', label="Laplace Noise PDF")
-    ax.set_title("PDF of Laplace DP Noise", fontsize=12, fontweight='bold')
+    ax.plot(x_range, pdf, color='#1a73e8', label="Laplace Noise PDF", linewidth=2.5)
+    ax.set_title("PDF of Laplace DP Noise", fontsize=9.5, fontweight='bold',
+                 bbox=dict(boxstyle='round,pad=0.4', facecolor='#ffffff', edgecolor='#dadce0', linewidth=1.2))
+    ax.tick_params(axis='both', labelsize=11)
 
 ax.grid(True, linestyle='--', alpha=0.5)
-ax.legend(loc='upper right')
+ax.legend(loc='upper right', frameon=True, facecolor=card_bg, edgecolor='#dadce0', fontsize=10.5)
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_dp_laplace.png"), dpi=300)
 plt.close()
 
-# Plot 3: Stacked Bar Chart for Dataset Records Distribution (Research Paper Vertical Column Aspect Ratio)
-fig, ax = plt.subplots(figsize=(5.5, 6.2), facecolor=fig_bg)
+# Plot 3: Stacked Bar Chart for Dataset Records Distribution
+fig, ax = plt.subplots(figsize=(5.5, 6.4), facecolor=fig_bg)
 ax.set_facecolor(card_bg)
 
 train_sizes = [m.get_train_size() for m in clients]
@@ -412,7 +410,7 @@ for idx, (bar, t_cnt) in enumerate(zip(bars_train, train_sizes)):
     pct = (t_cnt / total) * 100
     y_pos = t_cnt / 2.0
     ax.text(bar.get_x() + bar.get_width()/2.0, y_pos, f"{t_cnt}\n({pct:.0f}%)", 
-            ha='center', va='center', fontsize=9.5, fontweight='bold', color='#ffffff')
+            ha='center', va='center', fontsize=11.5, fontweight='bold', color='#ffffff')
 
 # Labels inside Green bar (Test)
 for idx, (bar, te_cnt) in enumerate(zip(bars_test, test_sizes)):
@@ -421,18 +419,19 @@ for idx, (bar, te_cnt) in enumerate(zip(bars_test, test_sizes)):
     pct = (te_cnt / total) * 100
     y_pos = t_cnt + (te_cnt / 2.0)
     ax.text(bar.get_x() + bar.get_width()/2.0, y_pos, f"{te_cnt}\n({pct:.0f}%)", 
-            ha='center', va='center', fontsize=9.5, fontweight='bold', color='#ffffff')
+            ha='center', va='center', fontsize=11.5, fontweight='bold', color='#ffffff')
 
-ax.set_title("Dataset Records Distribution\nAcross Client Nodes", fontsize=11, fontweight='bold', color=TEXT_COLOR, pad=12)
+ax.set_title("Dataset Records Distribution\nAcross Client Nodes", fontsize=9.5, fontweight='bold', color=TEXT_COLOR, pad=14,
+             bbox=dict(boxstyle='round,pad=0.4', facecolor='#ffffff', edgecolor='#dadce0', linewidth=1.2))
 ax.set_xlabel("Client Node", fontsize=10, color=TEXT_COLOR, labelpad=10)
 ax.set_ylabel("Number of Records", fontsize=10, color=TEXT_COLOR, labelpad=10)
 ax.set_xticks(x_indices)
-ax.set_xticklabels(names, fontsize=10, fontweight='bold')
+ax.set_xticklabels(names, fontsize=10.5, fontweight='bold')
 
 max_total = max([tr + te for tr, te in zip(train_sizes, test_sizes)])
-ax.set_ylim(0, max_total * 1.15)
+ax.set_ylim(0, max_total * 1.25)
 ax.grid(True, linestyle='--', alpha=0.4, axis='y')
-ax.legend(loc='upper right', frameon=True, facecolor=card_bg, edgecolor='#dadce0', fontsize=9.5)
+ax.legend(loc='upper right', frameon=True, facecolor=card_bg, edgecolor='#dadce0', fontsize=11)
 plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_dataset_sizes.png"), dpi=300)
 plt.close()
@@ -440,7 +439,7 @@ plt.close()
 # Plot 4: Confusion Matrix
 fig, ax = plt.subplots(figsize=(7, 6), facecolor=fig_bg)
 ax.set_facecolor(card_bg)
-sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=labels, yticklabels=labels, ax=ax, cbar=False)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=labels, yticklabels=labels, ax=ax, cbar=False, annot_kws={"size": 14, "weight": "bold"})
 ax.set_title("Global Aggregated Model Confusion Matrix", fontsize=12, fontweight='bold', pad=15)
 ax.set_xlabel("Predicted Condition", fontsize=10, labelpad=10)
 ax.set_ylabel("True Condition", fontsize=10, labelpad=10)

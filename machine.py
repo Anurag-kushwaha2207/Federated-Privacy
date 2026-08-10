@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Standalone Client Execution Script
-Evaluates Machine 1, Machine 2, and Machine 3 independently without Federated Aggregation.
+
+Evaluates Machine 1, Machine 2, and Machine 3 independently without federated aggregation.
 """
 
 import sys
@@ -68,7 +69,7 @@ def main():
 
     for idx, m in enumerate(clients):
         m.initialize_model()
-        # Train for 100 epochs locally to achieve near-convergence for DP sensitivity mathematical guarantees
+        # Train for 100 epochs locally
         m.local_train(epochs=100)
 
         if use_dp:
@@ -95,7 +96,7 @@ def main():
         print(f"  {names[idx]:<15} {sample_cnt:>15} {local_accuracies[idx]*100:>14.2f}%")
     print(f"  {'-'*47}\n")
 
-    # ── RISK LEVEL MAPPING & ALERTS ──
+    # Map predicted class to health risk level
     def map_to_risk_level(pred_class):
         if pred_class == 0:
             return "LOW RISK"

@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-============================================================
-  MACHINE 2 — IoT Health Monitoring Partition 2
-  Model  : SGDClassifier (Logistic Regression)
-  Target : Health Event (0, 1, 2, 3)
-============================================================
+Machine 2 — Client Node for Federated IoT Health Monitoring
 """
 
 import os
@@ -14,9 +10,9 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 
-# ── CONFIG ─────────────────────────────────────────────────
+# Configuration constants
 DATA_FILE   = os.path.join(os.path.dirname(__file__), "machine2_data.json")
-ALPHA       = 0.20  # Regularization parameter
+ALPHA       = 0.20  # L2 Regularization parameter
 R_CLIP      = 1.5   # Maximum L2 norm clipping threshold for feature vectors
 SEED        = 42
 
@@ -27,7 +23,7 @@ class Machine2:
         self.alpha   = ALPHA
         self.rng     = np.random.RandomState(SEED)
         
-        # Initialize Logistic Regression with SGD (L2 penalty)
+        # SGD Logistic Regression model with L2 regularization
         self.model = SGDClassifier(
             loss='log_loss', penalty='l2', alpha=self.alpha,
             fit_intercept=True, warm_start=True, random_state=SEED
@@ -45,18 +41,13 @@ class Machine2:
         self.n_samples   = 0
         self.scaler      = StandardScaler()
         
-        # Load and prepare data
         self.load_data()
 
     def load_data(self):
         """
-        SYNTHETIC-AWARE LEAKAGE-SAFE DATA SPLIT WITH EXPANDED REAL TEST SET:
-        1. Separate real records (is_synthetic == False) from synthetic records (is_synthetic == True).
-        2. Perform 65/35 train/test split EXCLUSIVELY on real records (stratified by target).
-           Expanded test_size=0.35 yields a robust evaluation set of ~806 real patient records across clients.
-        3. Place synthetic records in local training set for class balance.
-        4. Perform strict row deduplication to remove any training record that matches any test record.
-        This guarantees 100% real unseen test set and EXACT 0.00% data leakage/overlap.
+        Load and split client dataset into train and test sets.
+        Performs stratified train/test split on real patient records,
+        includes synthetic samples in training if available, and removes any overlap.
         """
         df = pd.read_json(DATA_FILE, orient='records')
         
@@ -77,7 +68,7 @@ class Machine2:
         X_real = real_df[feature_cols].values
         y_real = self.le.transform(real_df["Daily_Health_Condition"].values)
 
-        # Train/test split ONLY on real records with test_size=0.35 (test set = 100% real unseen data)
+        # Train/test split on real records (35% test size)
         X_tr_real, X_te_real, y_tr_real, y_te_real = train_test_split(
             X_real, y_real, test_size=0.35, random_state=SEED, stratify=y_real
         )
@@ -91,7 +82,7 @@ class Machine2:
             X_tr_raw = X_tr_real
             y_tr_raw = y_tr_real
 
-        # STRICT OVERLAP DEDUPLICATION: Purge any training row matching any test row
+        # Remove any training row that matches test rows exactly
         clean_mask = []
         for row in X_tr_raw:
             match = np.any(np.all(np.isclose(X_te_real, row), axis=1))
@@ -103,16 +94,14 @@ class Machine2:
         self.y_test      = y_te_real
         self.n_samples   = len(self.X_train_raw)
 
-        # Default fallback local scaling (overridden by server's federated scaler)
+        # Local scaling fallback (overridden by server global scaler)
         self.X_train = self.scaler.fit_transform(self.X_train_raw)
         self.X_test  = self.scaler.transform(self.X_test_raw)
         self.initialize_model()
 
     def get_feature_stats(self):
         """
-        Privacy-Preserving Federated Feature Statistics Aggregation.
-        Returns local sample count, mean vector, and variance vector of raw training features.
-        Zero raw data is shared with the server.
+        Compute local feature statistics (count, mean, variance) for global scaling.
         """
         n_i = len(self.X_train_raw)
         mean_i = np.mean(self.X_train_raw, axis=0)
@@ -121,8 +110,7 @@ class Machine2:
 
     def set_federated_scaler(self, mean_global, scale_global):
         """
-        Sets the global pooled mean and scale received from the server aggregator.
-        Configures local StandardScaler without raw data leakage.
+        Set global mean and variance parameters for standardization.
         """
         self.scaler.mean_  = mean_global.copy()
         self.scaler.scale_ = scale_global.copy()
@@ -158,8 +146,7 @@ class Machine2:
 
     def get_dp_weights(self, custom_epsilon=None):
         """
-        Laplace Output Perturbation DP on model weights.
-        Uses top-level R_CLIP constant and full release budget epsilon.
+        Add Laplace noise to model parameters for differential privacy.
         """
         if self.dp_mode == "input":
             return self.get_weights()
@@ -199,7 +186,6 @@ class Machine2:
         scale = sensitivity / eps
         return f"Output Perturbation DP | Sensitivity={sensitivity:.6f} | Scale={scale:.6f} | MaxNorm(R)={R:.4f} | R_CLIP={R_CLIP}"
 
-# ── STANDALONE TEST ────────────────────────────────────────
 if __name__ == "__main__":
     import argparse
     from sklearn.metrics import accuracy_score
