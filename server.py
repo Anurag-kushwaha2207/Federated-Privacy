@@ -27,6 +27,28 @@ warnings.filterwarnings('ignore')
 from machine1 import Machine1, ALPHA, R_CLIP
 from machine2 import Machine2
 from machine3 import Machine3
+from explain import explain_prediction
+
+def compute_global_feature_importance(global_coef, feature_names, class_names):
+    """
+    Global feature importance directly from FedAvg model weights.
+    Privacy note: global_coef is ALREADY DP-protected (single-release 
+    noise applied at final round). Since this function is a deterministic 
+    computation on the already-noised weights (post-processing), it 
+    inherits the same epsilon-DP guarantee — NO extra privacy budget 
+    is consumed. This is the "post-processing immunity" property of DP.
+    """
+    importance = np.abs(global_coef)  # shape: (n_classes, n_features)
+    print("\n=================== GLOBAL FEATURE IMPORTANCE ===================")
+    for c_idx, c_name in enumerate(class_names):
+        top_features = sorted(
+            zip(feature_names, importance[c_idx]),
+            key=lambda x: -x[1]
+        )[:5]
+        print(f"  Top features for '{c_name}':")
+        for fname, score in top_features:
+            print(f"    {fname:<25} importance={score:.4f}")
+    return importance
 
 OUT_DIR = os.path.dirname(__file__)
 
@@ -223,6 +245,17 @@ print("  " + "-" * 49)
 print(f"  {'FedAvg Global':<18} {sum(m.get_train_size() for m in clients):>15} {history_acc[-1]*100:>11.2f}%")
 print("  " + "-" * 49)
 
+# Step 3b: Compute & Print Global Feature Importance
+feature_names = [
+    'heart_rate', 'blood_oxygen', 'blood_pressure_systolic', 'blood_pressure_diastolic', 
+    'glucose_level', 'body_temperature', 'respiratory_rate', 'activity_level', 
+    'sleep_quality', 'stress_level', 'hrv_sdnn', 'steps_count', 'calories_burned',
+    'hr_stress_ratio', 'spo2_deficit', 'bp_diff', 'vital_risk_index'
+]
+class_names = ["Normal", "Mild Event", "Moderate Event", "Severe Event"]
+
+global_importance = compute_global_feature_importance(global_coef, feature_names, class_names)
+
 # Step 4: Fine-tune local models (Personalization)
 print("\n=================== MODEL PERSONALIZATION ===================")
 print("Each client receives the global model and fine-tunes on local data...")
@@ -265,10 +298,14 @@ if args.verbose:
         else:
             return "HIGH RISK", "Status: Severe Event detected! Alert: Immediate clinical consultation is advised."
 
-    for idx, p in enumerate(sample_preds):
-        risk_level, alert_msg = get_health_recommendation(p)
-        print(f"  Sample {idx+1} | Predicted: {p} ({class_names_map[p]}) | Risk Level: {risk_level}")
-        print(f"    - Alert/Recommendation: {alert_msg}")
+    for idx in range(min(4, len(sample_x))):
+        X_patient = sample_x[idx]
+        pred_c, explanation_parts = explain_prediction(m1.model, m1.X_train, X_patient, feature_names)
+        risk_level, alert_msg = get_health_recommendation(pred_c)
+        full_alert = f"{alert_msg} — Primary factors: {', '.join(explanation_parts)}"
+        print(f"  Sample {idx+1} | Predicted: {pred_c} ({class_names_map[pred_c]}) | Risk Level: {risk_level}")
+        print(f"    - Risk Recommendation : {alert_msg}")
+        print(f"    - On-Device Explanation: {full_alert}\n")
 
     print(f"\nCombined Confusion Matrix (Global Aggregated Model):")
     print(f"  {'Actual / Predicted':<20} {'Normal':<10} {'Mild':<10} {'Moderate':<10} {'Severe':<10}")
@@ -447,5 +484,33 @@ plt.tight_layout()
 plt.savefig(os.path.join(OUT_DIR, "plot_confusion_matrix.png"), dpi=300)
 plt.close()
 
-print("Plots saved: plot_accuracy.png, plot_dp_laplace.png, plot_dataset_sizes.png, plot_confusion_matrix.png")
+# Plot 5: Global Feature Importance
+fig, axes = plt.subplots(2, 2, figsize=(12, 10), facecolor=fig_bg)
+axes = axes.flatten()
+colors_class = ['#1e8e3e', '#f9ab00', '#e37400', '#d93025']
+
+for c_idx, c_name in enumerate(class_names):
+    ax = axes[c_idx]
+    ax.set_facecolor(card_bg)
+    
+    top_5 = sorted(zip(feature_names, global_importance[c_idx]), key=lambda x: x[1], reverse=True)[:5]
+    f_names_top = [x[0] for x in reversed(top_5)]
+    f_scores_top = [x[1] for x in reversed(top_5)]
+    
+    bars = ax.barh(f_names_top, f_scores_top, color=colors_class[c_idx], height=0.55)
+    ax.set_title(f"Top Features — {c_name}", fontsize=11, fontweight='bold', color=TEXT_COLOR)
+    ax.set_xlabel("Feature Weight Magnitude |coef|", fontsize=9.5, color=TEXT_COLOR)
+    ax.grid(True, linestyle='--', alpha=0.4, axis='x')
+    
+    for bar in bars:
+        w = bar.get_width()
+        ax.text(w + 0.005, bar.get_y() + bar.get_height()/2.0, f"{w:.4f}",
+                va='center', fontsize=9, fontweight='bold', color=TEXT_COLOR)
+
+plt.suptitle("Global Model Feature Importance (FedAvg + DP)", fontsize=13, fontweight='bold', color=TEXT_COLOR, y=0.98)
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.savefig(os.path.join(OUT_DIR, "plot_feature_importance.png"), dpi=300)
+plt.close()
+
+print("Plots saved: plot_accuracy.png, plot_dp_laplace.png, plot_dataset_sizes.png, plot_confusion_matrix.png, plot_feature_importance.png")
 print("Done.")
