@@ -513,4 +513,19 @@ plt.savefig(os.path.join(OUT_DIR, "plot_feature_importance.png"), dpi=300)
 plt.close()
 
 print("Plots saved: plot_accuracy.png, plot_dp_laplace.png, plot_dataset_sizes.png, plot_confusion_matrix.png, plot_feature_importance.png")
+
+# Step 7: Model Persistence (Save trained model & scaler for predict_patient.py)
+import joblib
+model_path = os.path.join(OUT_DIR, "trained_model.pkl")
+model_artifacts = {
+    "global_coef": global_coef,
+    "global_intercept": global_intercept,
+    "mu_fed": mu_fed,
+    "scale_fed": scale_fed,
+    "feature_names": feature_names,
+    "class_names": class_names,
+    "alpha": ALPHA
+}
+joblib.dump(model_artifacts, model_path)
+print(f"Trained global model state saved to: {model_path}")
 print("Done.")
